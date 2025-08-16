@@ -1,29 +1,82 @@
-# StudyMate API
+# StudyMate API Server
 
-AI 기반 공부 보조 서비스 백엔드 API
+> StudyMate 서비스의 백엔드 API 서버
 
-## 🎯 프로젝트 개요
+AI 기반 개인화 학습 플랫폼 StudyMate의 서버 사이드 애플리케이션입니다. Django REST Framework를 기반으로 구축되었으며, OpenAI GPT를 활용한 개인화 학습 콘텐츠 생성 및 Stripe 결제 시스템을 제공합니다.
 
-StudyMate는 사용자의 학습 목표와 수준에 맞춰 개인화된 학습 요약과 퀴즈를 제공하는 AI 기반 공부 보조 서비스입니다.
+## 🏗️ 서버 아키텍처
 
-### 주요 기능
+### 시스템 구성도
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Mobile App    │    │   Web Client    │    │   Admin Panel   │
+│  (React Native) │    │     (React)     │    │  (Django Admin) │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
+          │                      │                      │
+          └──────────────────────┼──────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │  API Gateway    │
+                    │ (Load Balancer) │
+                    └─────────┬───────┘
+                              │
+                    ┌─────────────────┐
+                    │  Django Server  │
+                    │   (REST API)    │
+                    └─────────┬───────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+┌───────▼────────┐  ┌────────▼────────┐  ┌────────▼────────┐
+│   PostgreSQL   │  │   Redis Cache   │  │   Celery Queue  │
+│   (Database)   │  │   (Session)     │  │  (Background)   │
+└────────────────┘  └─────────────────┘  └─────────────────┘
+                              │
+                    ┌─────────▼───────┐
+                    │  External APIs  │
+                    │ OpenAI, Stripe  │
+                    └─────────────────┘
+```
 
-- 🔐 **사용자 인증**: 이메일 기반 회원가입/로그인
-- 📚 **개인화 학습**: 사용자별 학습 설정 및 진도 관리
-- 🤖 **AI 요약 생성**: OpenAI GPT를 활용한 맞춤형 학습 요약
-- 📝 **퀴즈 시스템**: 객관식/주관식 문제 및 해설 제공
-- 🔔 **알림 시스템**: 학습 스케줄 알림 및 푸시 알림
-- 💳 **구독 관리**: Stripe 기반 결제 및 구독 시스템
+### 주요 서버 컴포넌트
 
-## 🏗️ 기술 스택
+- 🔐 **인증 시스템**: Django Token Authentication
+- 📚 **학습 관리**: 개인화 설정 및 진도 추적
+- 🤖 **AI 엔진**: OpenAI GPT 통합 서비스
+- 📝 **퀴즈 엔진**: 문제 생성 및 채점 시스템
+- 🔔 **알림 서버**: Celery 기반 스케줄링
+- 💳 **결제 처리**: Stripe 웹훅 및 구독 관리
 
-- **Backend**: Django 5.2, Django REST Framework
-- **Database**: SQLite (개발), PostgreSQL (프로덕션)
-- **Authentication**: Django Token Authentication
-- **AI**: OpenAI GPT-3.5/4
-- **Payment**: Stripe
-- **Task Queue**: Celery + Redis
-- **Documentation**: drf-spectacular (Swagger)
+## 🛠️ 기술 스택
+
+### **Backend Framework**
+- **Django 5.2**: 웹 프레임워크
+- **Django REST Framework 3.16**: REST API 개발
+- **Python 3.10+**: 프로그래밍 언어
+
+### **Database & Cache**
+- **PostgreSQL**: 프로덕션 데이터베이스
+- **SQLite**: 개발환경 데이터베이스
+- **Redis**: 캐싱 및 세션 스토어
+
+### **External Services**
+- **OpenAI GPT-3.5/4**: AI 콘텐츠 생성
+- **Stripe**: 결제 처리 및 구독 관리
+- **Firebase**: 푸시 알림 (예정)
+
+### **Background Processing**
+- **Celery**: 비동기 작업 처리
+- **Redis**: 메시지 브로커
+
+### **Development & Deployment**
+- **Docker**: 컨테이너화
+- **GitHub Actions**: CI/CD
+- **AWS/GCP**: 클라우드 인프라 (예정)
+
+### **Monitoring & Documentation**
+- **drf-spectacular**: Swagger/OpenAPI 문서
+- **Django Debug Toolbar**: 개발용 디버깅
+- **Sentry**: 에러 모니터링 (예정)
 
 ## 📦 설치 및 실행
 
@@ -129,34 +182,89 @@ REDIS_URL=redis://localhost:6379/0
 - `GET /api/notifications/` - 알림 목록
 - `POST /api/notifications/device-token/` - 디바이스 토큰 등록
 
-## 💰 구독 플랜
-
-### 무료 플랜
-- 하루 3번 요약 정보 제공 (9시, 12시, 21시 고정)
-- 기본 퀴즈 기능
-
-### 유료 플랜
-- **퀴즈 10회권**: 4,900원
-- **퀴즈 100회권**: 44,900원
-- **하루 5번 요약**: 9,900원/월
-- **하루 10번 요약**: 16,900원/월
-- **시간 변경권 5회**: 9,900원
-- **시간 변경권 10회**: 16,900원
-- **프로플랜**: 25,900원/월 (모든 기능 포함)
-
-## 🏢 프로젝트 구조
+## 📁 프로젝트 구조
 
 ```
 StudyMate-API/
-├── studymate_api/          # 프로젝트 설정
-├── accounts/               # 사용자 인증
-├── study/                  # 학습 관리
-├── quiz/                   # 퀴즈 시스템
-├── subscription/           # 구독 관리
-├── notifications/          # 알림 시스템
-├── requirements.txt        # 패키지 목록
-├── .env.example           # 환경변수 예시
-└── README.md              # 프로젝트 문서
+├── 📁 studymate_api/           # Django 프로젝트 설정
+│   ├── settings.py            # 환경설정
+│   ├── urls.py               # URL 라우팅
+│   └── wsgi.py               # WSGI 설정
+├── 📁 accounts/               # 사용자 인증 & 프로필
+│   ├── models.py             # User, UserProfile 모델
+│   ├── views.py              # 회원가입, 로그인 API
+│   ├── serializers.py        # 데이터 직렬화
+│   └── urls.py               # 인증 관련 URL
+├── 📁 study/                  # 학습 관리 시스템
+│   ├── models.py             # Subject, StudySettings, StudySummary 모델
+│   ├── services.py           # OpenAI GPT 통합 서비스
+│   ├── views.py              # 학습 관련 API
+│   └── admin.py              # Django 관리자 설정
+├── 📁 quiz/                   # 퀴즈 시스템
+│   ├── models.py             # Quiz, QuizAttempt 모델
+│   ├── views.py              # 퀴즈 관련 API
+│   └── serializers.py        # 퀴즈 데이터 직렬화
+├── 📁 subscription/           # 구독 & 결제
+│   ├── models.py             # SubscriptionPlan, Payment 모델
+│   ├── views.py              # Stripe 결제 API
+│   └── services.py           # 결제 처리 로직
+├── 📁 notifications/          # 알림 시스템
+│   ├── models.py             # Notification, DeviceToken 모델
+│   ├── tasks.py              # Celery 백그라운드 작업
+│   └── views.py              # 알림 관련 API
+├── 📄 requirements.txt        # Python 패키지 의존성
+├── 📄 .env.example           # 환경변수 템플릿
+├── 📄 docker-compose.yml     # Docker 컨테이너 설정
+└── 📄 manage.py              # Django 관리 명령어
+```
+
+## 🔌 주요 API 모듈
+
+### **1. Authentication (`/api/auth/`)**
+```python
+# 사용자 인증 관련 API
+POST /api/auth/register/     # 회원가입
+POST /api/auth/login/        # 로그인  
+POST /api/auth/logout/       # 로그아웃
+GET  /api/auth/profile/      # 프로필 조회
+PUT  /api/auth/profile/      # 프로필 수정
+```
+
+### **2. Study Management (`/api/study/`)**
+```python
+# 학습 관리 API
+GET  /api/study/subjects/           # 과목 목록
+POST /api/study/settings/           # 학습 설정 생성
+GET  /api/study/settings/           # 내 학습 설정 조회
+POST /api/study/generate-summary/   # AI 요약 생성
+GET  /api/study/summaries/          # 내 학습 요약 목록
+GET  /api/study/progress/           # 학습 진도 조회
+```
+
+### **3. Quiz System (`/api/quiz/`)**
+```python
+# 퀴즈 관련 API  
+GET  /api/quiz/quizzes/       # 퀴즈 목록
+POST /api/quiz/attempt/       # 퀴즈 응답 제출
+GET  /api/quiz/sessions/      # 퀴즈 세션 조회
+GET  /api/quiz/results/       # 퀴즈 결과 조회
+```
+
+### **4. Subscription (`/api/subscription/`)**
+```python
+# 구독 및 결제 API
+GET  /api/subscription/plans/           # 구독 플랜 목록
+POST /api/subscription/subscribe/       # 구독하기
+GET  /api/subscription/my-subscriptions/ # 내 구독 목록
+POST /api/subscription/webhook/         # Stripe 웹훅
+```
+
+### **5. Notifications (`/api/notifications/`)**
+```python
+# 알림 관련 API
+GET  /api/notifications/              # 내 알림 목록
+POST /api/notifications/device-token/ # 디바이스 토큰 등록
+PUT  /api/notifications/preferences/  # 알림 설정 변경
 ```
 
 ## 🧪 테스트
