@@ -11,3 +11,33 @@ Pillow==10.4.0
 openai==1.58.1
 django-extensions==3.2.3
 drf-spectacular==0.27.2
+
+# 성능 최적화
+django-redis==5.4.0
+django-cache-panel==0.1
+django-query-inspector==0.2.1
+
+# 보안 강화
+djangorestframework-simplejwt==5.3.0
+django-ratelimit==4.1.0
+django-cors-headers==4.7.0
+
+# 모니터링 & 로깅
+sentry-sdk==1.40.6
+django-silk==5.0.4
+
+# 테스팅
+pytest==7.4.4
+pytest-django==4.8.0
+pytest-cov==4.1.0
+factory-boy==3.3.0
+
+# AI 개선
+anthropic==0.7.8
+together==0.2.7
+
+# 개발 도구
+black==23.12.1
+flake8==7.0.0
+isort==5.13.2
+pre-commit==3.6.0

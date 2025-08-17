@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from decouple import config
 import os
+import socket
+from typing import List, Dict, Any
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,10 +27,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-7!oowea#s36e0^nfzfber-$imxqkdbxi1n%r1le_%h0!gm=rb5')
 
+# Validate critical settings
+if not SECRET_KEY or SECRET_KEY.startswith('django-insecure-'):
+    if not DEBUG:
+        raise ValueError('SECRET_KEY must be set for production')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
+
+# Environment detection
+ENVIRONMENT = config('ENVIRONMENT', default='development')
+IS_PRODUCTION = ENVIRONMENT == 'production'
+IS_STAGING = ENVIRONMENT == 'staging'
 
 
 # Application definition
@@ -43,11 +56,13 @@ INSTALLED_APPS = [
     
     'rest_framework',
     'rest_framework.authtoken',
+    'rest_framework_simplejwt',
     'corsheaders',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
     'drf_spectacular',
+    'silk',
     
     'accounts',
     'study',
@@ -67,6 +82,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Add performance monitoring middleware only in development
+if DEBUG:
+    MIDDLEWARE.insert(1, 'silk.middleware.SilkMiddleware')
 
 ROOT_URLCONF = 'studymate_api.urls'
 
@@ -93,10 +112,32 @@ WSGI_APPLICATION = 'studymate_api.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
+        'NAME': config('DB_NAME', default='studymate_db'),
+        'USER': config('DB_USER', default='postgres'),
+        'PASSWORD': config('DB_PASSWORD', default='password'),
+        'HOST': config('DB_HOST', default='localhost'),
+        'PORT': config('DB_PORT', default='5432', cast=int),
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=300, cast=int),
+        'OPTIONS': {
+            'MAX_CONNS': config('DB_MAX_CONNS', default=20, cast=int),
+            'MIN_CONNS': config('DB_MIN_CONNS', default=5, cast=int),
+            'connect_timeout': 10,
+        },
+        'TEST': {
+            'NAME': 'test_studymate_db',
+        }
     }
 }
+
+# SQLite fallback for development
+if config('USE_SQLITE', default=False, cast=bool):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -151,6 +192,7 @@ AUTH_USER_MODEL = 'accounts.User'
 # Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
@@ -160,7 +202,35 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
     ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': config('PAGE_SIZE', default=20, cast=int),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': config('THROTTLE_ANON', default='100/hour'),
+        'user': config('THROTTLE_USER', default='1000/hour'),
+        'login': '10/minute',
+        'register': '5/minute',
+        'ai_generation': '20/hour',
+        'stripe_webhook': '1000/hour',
+    },
+    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
+        'rest_framework.filters.OrderingFilter',
+    ],
+    'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
+    'DATETIME_INPUT_FORMATS': ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'],
 }
 
 # Django Allauth
@@ -170,32 +240,588 @@ ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
 
 # CORS Settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# CORS Settings - more secure configuration
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:3000,http://127.0.0.1:3000',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()]
+)
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
+
+# Only allow all origins in development
+if DEBUG and not IS_PRODUCTION:
+    CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_EXPOSE_HEADERS = [
+    'x-total-count',
+    'x-page-count',
+]
 
 # Celery Configuration
-CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
+# Celery Configuration - Enhanced
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Seoul'
+CELERY_ENABLE_UTC = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = config('CELERY_TASK_TIME_LIMIT', default=300, cast=int)
+CELERY_TASK_SOFT_TIME_LIMIT = config('CELERY_TASK_SOFT_TIME_LIMIT', default=240, cast=int)
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
+CELERY_BEAT_SCHEDULE = {}
+CELERY_TASK_ROUTES = {
+    'notifications.tasks.*': {'queue': 'notifications'},
+    'study.tasks.*': {'queue': 'ai_tasks'},
+    'subscription.tasks.*': {'queue': 'payments'},
+}
 
-# Stripe Settings
+# Stripe Settings - Enhanced
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+STRIPE_API_VERSION = config('STRIPE_API_VERSION', default='2023-10-16')
+STRIPE_CONNECT_CLIENT_ID = config('STRIPE_CONNECT_CLIENT_ID', default='')
+STRIPE_TEST_MODE = config('STRIPE_TEST_MODE', default=not IS_PRODUCTION, cast=bool)
 
-# OpenAI Settings
+# Payment Settings
+PAYMENT_CURRENCY = config('PAYMENT_CURRENCY', default='KRW')
+PAYMENT_SUCCESS_URL = config('PAYMENT_SUCCESS_URL', default='/payment/success/')
+PAYMENT_CANCEL_URL = config('PAYMENT_CANCEL_URL', default='/payment/cancel/')
+
+# OpenAI Settings - Enhanced
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+OPENAI_ORGANIZATION = config('OPENAI_ORGANIZATION', default='')
+OPENAI_PROJECT = config('OPENAI_PROJECT', default='')
 
-# API Documentation
+# API Keys validation
+if IS_PRODUCTION and not OPENAI_API_KEY:
+    import warnings
+    warnings.warn('OPENAI_API_KEY is not set in production environment')
+
+if IS_PRODUCTION and not STRIPE_SECRET_KEY:
+    import warnings
+    warnings.warn('STRIPE_SECRET_KEY is not set in production environment')
+
+# API Documentation - Enhanced
 SPECTACULAR_SETTINGS = {
     'TITLE': 'StudyMate API',
-    'DESCRIPTION': 'AI 기반 공부 보조 서비스 API',
-    'VERSION': '1.0.0',
+    'DESCRIPTION': 'AI 기반 개인화 학습 플랫폼 REST API',
+    'VERSION': config('API_VERSION', default='1.0.0'),
     'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'COMPONENT_NO_READ_ONLY_REQUIRED': True,
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+        'filter': True,
+    },
+    'REDOC_UI_SETTINGS': {
+        'hideDownloadButton': False,
+        'expandResponses': '200,201',
+        'pathInMiddlePanel': True,
+    },
+    'PREPROCESSING_HOOKS': [
+        'spectacular.preprocessing.filter_spec_by_user',
+    ],
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAuthenticated'] if IS_PRODUCTION else [],
+    'TAGS': [
+        {'name': 'Authentication', 'description': '사용자 인증 관련 API'},
+        {'name': 'Study', 'description': '학습 관리 API'},
+        {'name': 'Quiz', 'description': '퀴즈 시스템 API'},
+        {'name': 'Subscription', 'description': '구독 및 결제 API'},
+        {'name': 'Notifications', 'description': '알림 시스템 API'},
+        {'name': 'Health', 'description': '시스템 상태 확인 API'},
+    ],
 }
+
+# JWT Settings - Enhanced security
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=config('JWT_ACCESS_TOKEN_LIFETIME', default=60, cast=int)),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=config('JWT_REFRESH_TOKEN_LIFETIME', default=7, cast=int)),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': config('JWT_AUDIENCE', default=None),
+    'ISSUER': config('JWT_ISSUER', default='studymate-api'),
+    'JWK_URL': None,
+    'LEEWAY': timedelta(seconds=10),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
+    'JTI_CLAIM': 'jti',
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
+    'TOKEN_OBTAIN_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenObtainPairSerializer',
+    'TOKEN_REFRESH_SERIALIZER': 'rest_framework_simplejwt.serializers.TokenRefreshSerializer',
+}
+
+# Cache Configuration
+# Cache Configuration - Enhanced Redis setup
+REDIS_URL = config('REDIS_URL', default='redis://localhost:6379')
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'{REDIS_URL}/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': config('REDIS_MAX_CONNECTIONS', default=50, cast=int),
+                'retry_on_timeout': True,
+                'health_check_interval': 30,
+            },
+            'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+        },
+        'KEY_PREFIX': 'studymate',
+        'TIMEOUT': config('CACHE_TIMEOUT', default=300, cast=int),
+        'VERSION': 1,
+    },
+    'sessions': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'{REDIS_URL}/2',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'KEY_PREFIX': 'studymate_session',
+        'TIMEOUT': config('SESSION_CACHE_TIMEOUT', default=3600, cast=int),
+    }
+}
+
+# Session Configuration
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'sessions'
+SESSION_COOKIE_AGE = config('SESSION_COOKIE_AGE', default=3600, cast=int)
+SESSION_SAVE_EVERY_REQUEST = False
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+
+# Logging Configuration - Enhanced
+LOG_LEVEL = config('LOG_LEVEL', default='INFO' if IS_PRODUCTION else 'DEBUG')
+LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {name} {module} {process:d} {thread:d} {pathname}:{lineno} {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {name} {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+        'json': {
+            'format': '{"timestamp": "{asctime}", "level": "{levelname}", "logger": "{name}", "message": "{message}", "module": "{module}", "function": "{funcName}", "line": {lineno}}',
+            'style': '{',
+        },
+    },
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+            'filters': ['require_debug_true'],
+        },
+        'file_info': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / 'studymate_info.log',
+            'maxBytes': 10 * 1024 * 1024,  # 10MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
+        'file_error': {
+            'level': 'ERROR',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / 'studymate_error.log',
+            'maxBytes': 10 * 1024 * 1024,  # 10MB
+            'backupCount': 10,
+            'formatter': 'verbose',
+        },
+        'security_file': {
+            'level': 'WARNING',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / 'security.log',
+            'maxBytes': 5 * 1024 * 1024,  # 5MB
+            'backupCount': 10,
+            'formatter': 'json',
+        },
+        'ai_operations': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / 'ai_operations.log',
+            'maxBytes': 20 * 1024 * 1024,  # 20MB
+            'backupCount': 5,
+            'formatter': 'json',
+        },
+        'performance': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / 'performance.log',
+            'maxBytes': 10 * 1024 * 1024,  # 10MB
+            'backupCount': 3,
+            'formatter': 'json',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file_info', 'file_error'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file_info'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['file_error', 'security_file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['security_file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'studymate_api': {
+            'handlers': ['console', 'file_info', 'file_error'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'study.services': {
+            'handlers': ['ai_operations'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'performance': {
+            'handlers': ['performance'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['file_info', 'file_error'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'stripe': {
+            'handlers': ['security_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+# Sentry Configuration
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.redis import RedisIntegration
+from sentry_sdk.integrations.celery import CeleryIntegration
+
+sentry_sdk.init(
+    dsn=config('SENTRY_DSN', default=''),
+    integrations=[
+        DjangoIntegration(
+            transaction_style='url',
+            middleware_spans=True,
+            signals_spans=True,
+            cache_spans=True,
+        ),
+        RedisIntegration(),
+        CeleryIntegration(monitor_beat_tasks=True),
+    ],
+    traces_sample_rate=1.0,
+    send_default_pii=True,
+    environment=config('ENVIRONMENT', default='development'),
+)
+
+# Security Settings - Enhanced
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+# Production security settings
+if IS_PRODUCTION or not DEBUG:
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_PRELOAD = True
+    SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    CSRF_COOKIE_HTTPONLY = True
+    CSRF_COOKIE_SAMESITE = 'Strict'
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_TZ = True
+
+# CSRF Settings
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()]
+)
+
+# Rate limiting for critical endpoints
+RATELIMIT_ENABLE = config('RATELIMIT_ENABLE', default=True, cast=bool)
+RATELIMIT_USE_CACHE = 'default'
+
+# AI Models Configuration - Enhanced
+AI_MODELS = {
+    'openai': {
+        'api_key': config('OPENAI_API_KEY', default=''),
+        'organization': config('OPENAI_ORG_ID', default=''),
+        'models': {
+            'gpt-3.5-turbo': {
+                'max_tokens': 2000,
+                'temperature': 0.7,
+                'cost_per_1k_tokens': 0.002,
+                'context_window': 4096,
+            },
+            'gpt-4': {
+                'max_tokens': 2000,
+                'temperature': 0.7,
+                'cost_per_1k_tokens': 0.03,
+                'context_window': 8192,
+            },
+            'gpt-4-turbo-preview': {
+                'max_tokens': 4000,
+                'temperature': 0.7,
+                'cost_per_1k_tokens': 0.01,
+                'context_window': 128000,
+            },
+        },
+        'default_model': config('OPENAI_DEFAULT_MODEL', default='gpt-3.5-turbo'),
+        'timeout': config('OPENAI_TIMEOUT', default=30, cast=int),
+        'max_retries': config('OPENAI_MAX_RETRIES', default=3, cast=int),
+    },
+    'anthropic': {
+        'api_key': config('ANTHROPIC_API_KEY', default=''),
+        'models': {
+            'claude-3-haiku-20240307': {
+                'max_tokens': 2000,
+                'temperature': 0.7,
+                'cost_per_1k_tokens': 0.00025,
+            },
+            'claude-3-sonnet-20240229': {
+                'max_tokens': 2000,
+                'temperature': 0.7,
+                'cost_per_1k_tokens': 0.003,
+            },
+        },
+        'default_model': config('ANTHROPIC_DEFAULT_MODEL', default='claude-3-haiku-20240307'),
+        'timeout': config('ANTHROPIC_TIMEOUT', default=30, cast=int),
+    },
+    'together': {
+        'api_key': config('TOGETHER_API_KEY', default=''),
+        'models': {
+            'mistralai/Mixtral-8x7B-Instruct-v0.1': {
+                'max_tokens': 2000,
+                'temperature': 0.7,
+                'cost_per_1k_tokens': 0.0006,
+            },
+        },
+        'default_model': config('TOGETHER_DEFAULT_MODEL', default='mistralai/Mixtral-8x7B-Instruct-v0.1'),
+        'timeout': config('TOGETHER_TIMEOUT', default=30, cast=int),
+    },
+    'fallback_strategy': {
+        'enabled': config('AI_FALLBACK_ENABLED', default=True, cast=bool),
+        'primary': 'openai',
+        'secondary': 'anthropic',
+        'tertiary': 'together',
+    },
+    'rate_limits': {
+        'requests_per_minute': config('AI_RATE_LIMIT_RPM', default=100, cast=int),
+        'tokens_per_minute': config('AI_RATE_LIMIT_TPM', default=40000, cast=int),
+    }
+}
+
+# Performance Settings - Enhanced
+DATA_UPLOAD_MAX_MEMORY_SIZE = config('DATA_UPLOAD_MAX_MEMORY_SIZE', default=10 * 1024 * 1024, cast=int)  # 10MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = config('FILE_UPLOAD_MAX_MEMORY_SIZE', default=10 * 1024 * 1024, cast=int)  # 10MB
+FILE_UPLOAD_PERMISSIONS = 0o644
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
+
+# Database query optimization
+DATABASE_ROUTERS = []
+DATABASE_TIMEOUT = config('DATABASE_TIMEOUT', default=300, cast=int)
+
+# Email backend optimization
+if IS_PRODUCTION:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+EMAIL_TIMEOUT = 30
+
+# Database Optimization - Enhanced
+if 'postgresql' in DATABASES['default']['ENGINE']:
+    DATABASES['default']['OPTIONS'].update({
+        'MAX_CONNS': config('DB_MAX_CONNS', default=20, cast=int),
+        'MIN_CONNS': config('DB_MIN_CONNS', default=5, cast=int),
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=300, cast=int),
+        'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        'charset': 'utf8mb4',
+    })
+
+# Connection pooling for high load
+if IS_PRODUCTION:
+    DATABASES['default'].update({
+        'ENGINE': 'django_prometheus.db.backends.postgresql',
+    })
+
+# Development Tools Configuration
+if DEBUG:
+    # Silk Configuration
+    SILKY_PYTHON_PROFILER = True
+    SILKY_PYTHON_PROFILER_BINARY = True
+    SILKY_AUTHENTICATION = True
+    SILKY_AUTHORISATION = True
+    SILKY_MAX_REQUEST_BODY_SIZE = 1024  # KB
+    SILKY_MAX_RESPONSE_BODY_SIZE = 1024  # KB
+    SILKY_INTERCEPT_PERCENT = 100
+    
+    # Django Debug Toolbar
+    if 'debug_toolbar' not in INSTALLED_APPS:
+        INSTALLED_APPS.append('debug_toolbar')
+    
+    if 'debug_toolbar.middleware.DebugToolbarMiddleware' not in MIDDLEWARE:
+        MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+    
+    # Show toolbar for internal IPs
+    hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+    INTERNAL_IPS = ['127.0.0.1', '10.0.2.2'] + [ip[:-1] + '1' for ip in ips]
+
+# Health Check & Monitoring Settings
+HEALTH_CHECK = {
+    'TIMEOUT': config('HEALTH_CHECK_TIMEOUT', default=10, cast=int),
+    'CACHE_TIMEOUT': config('HEALTH_CACHE_TIMEOUT', default=60, cast=int),
+    'CHECKS': {
+        'database': True,
+        'cache': True,
+        'storage': True,
+        'celery': True,
+        'external_apis': config('HEALTH_CHECK_EXTERNAL_APIS', default=False, cast=bool),
+    }
+}
+
+# Metrics and Monitoring
+METRICS_ENABLED = config('METRICS_ENABLED', default=IS_PRODUCTION, cast=bool)
+PROMETHEUS_METRICS_EXPORT_PORT = config('PROMETHEUS_METRICS_PORT', default=8001, cast=int)
+
+# Admin customization
+ADMIN_SITE_HEADER = 'StudyMate 관리자'
+ADMIN_SITE_TITLE = 'StudyMate Admin'
+ADMIN_INDEX_TITLE = 'StudyMate 관리 대시보드'
+
+# Additional third-party app settings
+if METRICS_ENABLED:
+    INSTALLED_APPS.extend([
+        'django_prometheus',
+    ])
+    MIDDLEWARE.insert(0, 'django_prometheus.middleware.PrometheusBeforeMiddleware')
+    MIDDLEWARE.append('django_prometheus.middleware.PrometheusAfterMiddleware')
+
+# Custom settings for the application
+STUDYMATE_SETTINGS = {
+    'MAX_DAILY_SUMMARIES': config('MAX_DAILY_SUMMARIES', default=10, cast=int),
+    'MAX_QUIZ_ATTEMPTS_PER_DAY': config('MAX_QUIZ_ATTEMPTS_PER_DAY', default=50, cast=int),
+    'DEFAULT_STUDY_REMINDER_TIME': config('DEFAULT_STUDY_REMINDER_TIME', default='09:00'),
+    'AI_RESPONSE_CACHE_TTL': config('AI_RESPONSE_CACHE_TTL', default=3600, cast=int),
+    'USER_INACTIVITY_THRESHOLD_DAYS': config('USER_INACTIVITY_THRESHOLD_DAYS', default=30, cast=int),
+    'SUBSCRIPTION_GRACE_PERIOD_DAYS': config('SUBSCRIPTION_GRACE_PERIOD_DAYS', default=3, cast=int),
+    'NOTIFICATION_BATCH_SIZE': config('NOTIFICATION_BATCH_SIZE', default=100, cast=int),
+    'MAX_FILE_UPLOAD_SIZE': config('MAX_FILE_UPLOAD_SIZE', default=5 * 1024 * 1024, cast=int),  # 5MB
+    'SUPPORTED_IMAGE_FORMATS': ['JPEG', 'PNG', 'GIF', 'WEBP'],
+    'API_RATE_LIMIT_BURST': config('API_RATE_LIMIT_BURST', default=10, cast=int),
+    'CELERY_RESULT_EXPIRES': config('CELERY_RESULT_EXPIRES', default=3600, cast=int),
+}
+
+# Additional validation for production
+if IS_PRODUCTION:
+    if not ALLOWED_HOSTS:
+        raise ValueError('ALLOWED_HOSTS must be set in production')
+    if DEBUG:
+        raise ValueError('DEBUG must be False in production')
+    if not config('OPENAI_API_KEY'):
+        raise ValueError('OPENAI_API_KEY must be set in production')
+    if not config('STRIPE_SECRET_KEY'):
+        raise ValueError('STRIPE_SECRET_KEY must be set in production')
+    if not config('SENTRY_DSN'):
+        import warnings
+        warnings.warn('SENTRY_DSN is not set in production environment')
+
+# Feature Flags
+FEATURE_FLAGS = {
+    'AI_FALLBACK_ENABLED': config('FEATURE_AI_FALLBACK', default=True, cast=bool),
+    'ADVANCED_ANALYTICS': config('FEATURE_ADVANCED_ANALYTICS', default=IS_PRODUCTION, cast=bool),
+    'BETA_FEATURES': config('FEATURE_BETA_FEATURES', default=not IS_PRODUCTION, cast=bool),
+    'MAINTENANCE_MODE': config('FEATURE_MAINTENANCE_MODE', default=False, cast=bool),
+    'USER_FEEDBACK_COLLECTION': config('FEATURE_USER_FEEDBACK', default=True, cast=bool),
+    'A_B_TESTING': config('FEATURE_AB_TESTING', default=IS_PRODUCTION, cast=bool),
+}
+
+# Django Debug Toolbar specific settings
+if DEBUG and 'debug_toolbar' in INSTALLED_APPS:
+    DEBUG_TOOLBAR_CONFIG = {
+        'SHOW_TOOLBAR_CALLBACK': lambda request: DEBUG and not request.is_ajax(),
+        'SHOW_TEMPLATE_CONTEXT': True,
+        'ENABLE_STACKTRACES': True,
+    }
+    
+    DEBUG_TOOLBAR_PANELS = [
+        'debug_toolbar.panels.versions.VersionsPanel',
+        'debug_toolbar.panels.timer.TimerPanel',
+        'debug_toolbar.panels.settings.SettingsPanel',
+        'debug_toolbar.panels.headers.HeadersPanel',
+        'debug_toolbar.panels.request.RequestPanel',
+        'debug_toolbar.panels.sql.SQLPanel',
+        'debug_toolbar.panels.staticfiles.StaticFilesPanel',
+        'debug_toolbar.panels.templates.TemplatesPanel',
+        'debug_toolbar.panels.cache.CachePanel',
+        'debug_toolbar.panels.signals.SignalsPanel',
+        'debug_toolbar.panels.logging.LoggingPanel',
+        'debug_toolbar.panels.redirects.RedirectsPanel',
+        'debug_toolbar.panels.profiling.ProfilingPanel',
+    ]
