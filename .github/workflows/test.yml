@@ -1,0 +1,225 @@
+name: 🧪 테스트 및 코드 품질 검사
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  DJANGO_SETTINGS_MODULE: studymate_api.test_settings
+  SECRET_KEY: test-secret-key-for-ci
+  DEBUG: False
+
+jobs:
+  test:
+    name: 🧪 테스트 실행
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: [3.11, 3.12]
+        django-version: [4.2, 5.0]
+    
+    services:
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_studymate
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: 📥 코드 체크아웃
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Python ${{ matrix.python-version }} 설정
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: 📦 캐시 설정
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: 📋 의존성 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install Django==${{ matrix.django-version }}
+    
+    - name: 🔍 코드 스타일 검사 (Black)
+      run: |
+        pip install black
+        black --check --diff .
+    
+    - name: 🔍 코드 품질 검사 (Flake8)
+      run: |
+        pip install flake8
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: 🔍 보안 검사 (Bandit)
+      run: |
+        pip install bandit
+        bandit -r . -x tests/,venv/
+    
+    - name: 🧪 단위 테스트 실행
+      run: |
+        python -m pytest tests/ -m "unit" --tb=short -v
+    
+    - name: 🧪 통합 테스트 실행
+      run: |
+        python -m pytest tests/ -m "integration" --tb=short -v
+    
+    - name: 🧪 API 테스트 실행
+      run: |
+        python -m pytest tests/ -m "api" --tb=short -v
+    
+    - name: 📊 커버리지 테스트
+      run: |
+        python -m pytest tests/ --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing
+    
+    - name: 📤 커버리지 업로드 (Codecov)
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+    
+    - name: 📋 테스트 결과 업로드
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}-${{ matrix.django-version }}
+        path: |
+          test_results/
+          htmlcov/
+    
+  performance:
+    name: ⚡ 성능 테스트
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: 📥 코드 체크아웃
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Python 설정
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+    
+    - name: 📋 의존성 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: ⚡ 성능 테스트 실행
+      run: |
+        python -m pytest tests/ -m "performance" --tb=short -v --benchmark-only
+    
+    - name: 📋 성능 결과 업로드
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-results
+        path: |
+          .benchmarks/
+  
+  security:
+    name: 🔒 보안 검사
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 코드 체크아웃
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Python 설정
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+    
+    - name: 📋 의존성 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: 🔒 보안 테스트 실행
+      run: |
+        python -m pytest tests/ -m "security" --tb=short -v
+    
+    - name: 🔍 Django 보안 검사
+      run: |
+        python manage.py check --deploy --settings=studymate_api.test_settings
+    
+    - name: 🔍 의존성 보안 검사
+      run: |
+        pip install safety
+        safety check
+  
+  code-quality:
+    name: 📊 코드 품질 분석
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 코드 체크아웃
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: 🐍 Python 설정
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+    
+    - name: 📋 의존성 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install sonar-scanner
+    
+    - name: 📊 SonarCloud 스캔
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  
+  notification:
+    name: 📧 결과 알림
+    runs-on: ubuntu-latest
+    needs: [test, performance, security, code-quality]
+    if: always()
+    
+    steps:
+    - name: 📧 성공 알림
+      if: needs.test.result == 'success' && needs.performance.result == 'success' && needs.security.result == 'success'
+      run: |
+        echo "✅ 모든 테스트가 성공적으로 완료되었습니다!"
+    
+    - name: 📧 실패 알림
+      if: needs.test.result == 'failure' || needs.performance.result == 'failure' || needs.security.result == 'failure'
+      run: |
+        echo "❌ 일부 테스트가 실패했습니다. 로그를 확인해주세요."
+        exit 1
