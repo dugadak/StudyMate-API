@@ -872,3 +872,156 @@ ERROR_TRACKING = {
 
 # Version information
 VERSION = config('VERSION', default='1.0.0')
+
+# API Documentation (drf-spectacular) Settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'StudyMate API',
+    'DESCRIPTION': '''
+StudyMate API는 AI 기반 학습 플랫폼을 위한 RESTful API입니다.
+
+## 주요 기능
+
+- **🔐 사용자 관리**: 회원가입, 로그인, 프로필 관리, 이메일 인증
+- **📚 학습 관리**: AI 기반 학습 요약 생성 및 관리, 개인화된 학습 경로
+- **❓ 퀴즈 시스템**: 동적 퀴즈 생성, 실시간 평가, 진도 추적
+- **💳 구독 관리**: Stripe 기반 구독 및 결제 시스템
+- **🔔 알림 시스템**: 개인화된 학습 알림, 스케줄 관리
+
+## 인증 방식
+
+API는 JWT (JSON Web Token) 기반 인증을 사용합니다.
+
+**헤더 형식:**
+```
+Authorization: Bearer <your-access-token>
+```
+
+## 응답 형식
+
+모든 API 응답은 표준화된 JSON 형식을 따릅니다:
+
+**성공 응답:**
+```json
+{
+  "success": true,
+  "message": "요청이 성공적으로 처리되었습니다.",
+  "data": {},
+  "timestamp": "2024-01-01T12:00:00Z"
+}
+```
+
+**에러 응답:**
+```json
+{
+  "error": true,
+  "error_id": "uuid",
+  "code": "ERROR_CODE",
+  "message": "에러 메시지",
+  "details": {},
+  "timestamp": "2024-01-01T12:00:00Z"
+}
+```
+
+## 제한사항
+
+- **일반 API**: 사용자별 시간당 1000회
+- **AI 생성**: 시간당 20회
+- **인증 시도**: 5분당 10회
+- **페이지 크기**: 최대 100개 항목
+
+## 지원
+
+- **이메일**: support@studymate.com
+- **문서**: https://docs.studymate.com
+- **상태**: https://status.studymate.com
+    ''',
+    'VERSION': VERSION,
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAuthenticated'],
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': False,
+        'defaultModelsExpandDepth': 1,
+        'defaultModelExpandDepth': 1,
+        'displayRequestDuration': True,
+        'docExpansion': 'none',
+        'filter': True,
+        'showExtensions': True,
+        'showCommonExtensions': True,
+        'tryItOutEnabled': True,
+    },
+    'SWAGGER_UI_DIST': 'SIDECAR',
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
+    'REDOC_DIST': 'SIDECAR',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SORT_OPERATIONS': False,
+    'ENUM_NAME_OVERRIDES': {
+        'ValidationErrorEnum': 'studymate_api.enums.ValidationErrorEnum',
+    },
+    'POSTPROCESSING_HOOKS': [
+        'studymate_api.schema_hooks.postprocess_schema_enums',
+    ],
+    'PREPROCESSING_HOOKS': [
+        'studymate_api.schema_hooks.preprocess_exclude_paths',
+    ],
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'SCHEMA_PATH_PREFIX_TRIM': True,
+    'SERVERS': [
+        {
+            'url': 'https://api.studymate.com',
+            'description': '운영 서버'
+        },
+        {
+            'url': 'https://staging-api.studymate.com',
+            'description': '스테이징 서버'
+        },
+        {
+            'url': 'http://localhost:8000',
+            'description': '개발 서버'
+        }
+    ],
+    'EXTERNAL_DOCS': {
+        'description': 'StudyMate 개발자 문서',
+        'url': 'https://docs.studymate.com',
+    },
+    'CONTACT': {
+        'name': 'StudyMate API 지원팀',
+        'url': 'https://studymate.com/support',
+        'email': 'support@studymate.com',
+    },
+    'LICENSE': {
+        'name': 'Proprietary',
+        'url': 'https://studymate.com/terms',
+    },
+    'TAGS': [
+        {
+            'name': '인증/사용자 관리',
+            'description': '사용자 인증, 회원가입, 프로필 관리 관련 API'
+        },
+        {
+            'name': '학습 관리',
+            'description': '과목, 학습 요약, 진도 관리 관련 API'
+        },
+        {
+            'name': '퀴즈 시스템',
+            'description': '퀴즈 생성, 응시, 결과 관리 관련 API'
+        },
+        {
+            'name': '구독 관리',
+            'description': '구독 플랜, 결제, 할인 관리 관련 API'
+        },
+        {
+            'name': '알림 시스템',
+            'description': '알림 설정, 발송, 기기 관리 관련 API'
+        },
+        {
+            'name': '관리자 기능',
+            'description': '관리자 전용 기능 및 시스템 관리 API'
+        },
+        {
+            'name': '모니터링',
+            'description': '시스템 상태, 헬스체크, 메트릭 관련 API'
+        }
+    ]
+}

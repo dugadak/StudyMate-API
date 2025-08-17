@@ -7,6 +7,12 @@ from django.utils import timezone
 from django.db import models
 from django.db.models import Q, Count, Avg, Sum, Max, F
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
+from studymate_api.schema import (
+    study_schema, COMMON_PARAMETERS, APIExamples,
+    StandardResponseSerializer, ErrorResponseSerializer, get_paginated_response_schema
+)
 from typing import Dict, Any, Optional
 import logging
 
@@ -23,6 +29,10 @@ from .pagination import StudyPagination
 logger = logging.getLogger(__name__)
 
 
+@study_schema(
+    summary="과목 관리",
+    description="학습 과목 조회, 생성, 수정, 삭제를 관리합니다."
+)
 class SubjectViewSet(viewsets.ModelViewSet):
     """Enhanced Subject ViewSet with filtering and statistics"""
     
@@ -79,6 +89,71 @@ class SubjectViewSet(viewsets.ModelViewSet):
             return [permissions.IsAdminUser()]
         return [permissions.IsAuthenticated()]
     
+    @study_schema(
+        summary="과목 통계 조회",
+        description="""
+        특정 과목의 상세 통계 정보를 조회합니다.
+        
+        - 전체 학습자 수
+        - 평균 평점
+        - 사용자별 학습 진행 상황
+        - 최근 활동 통계
+        """,
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'success': {'type': 'boolean'},
+                    'data': {
+                        'type': 'object',
+                        'properties': {
+                            'user_stats': {
+                                'type': 'object',
+                                'properties': {
+                                    'user_summaries_count': {'type': 'integer'},
+                                    'user_average_rating': {'type': 'number'},
+                                    'user_study_time': {'type': 'integer'},
+                                    'last_activity': {'type': 'string'}
+                                }
+                            },
+                            'global_stats': {
+                                'type': 'object',
+                                'properties': {
+                                    'total_learners': {'type': 'integer'},
+                                    'total_summaries': {'type': 'integer'},
+                                    'average_rating': {'type': 'number'},
+                                    'recent_activity': {'type': 'integer'}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        examples=[
+            OpenApiExample(
+                '과목 통계 응답',
+                value={
+                    'success': True,
+                    'data': {
+                        'user_stats': {
+                            'user_summaries_count': 15,
+                            'user_average_rating': 4.2,
+                            'user_study_time': 240,
+                            'last_activity': '2024-01-01T12:00:00Z'
+                        },
+                        'global_stats': {
+                            'total_learners': 1245,
+                            'total_summaries': 5680,
+                            'average_rating': 4.5,
+                            'recent_activity': 89
+                        }
+                    }
+                },
+                response_only=True
+            )
+        ]
+    )
     @action(detail=True, methods=['get'])
     def statistics(self, request, pk=None):
         """Get detailed subject statistics"""

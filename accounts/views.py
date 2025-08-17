@@ -11,8 +11,12 @@ from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
 from django.core.cache import cache
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
+from studymate_api.schema import (
+    auth_schema, COMMON_PARAMETERS, APIExamples, 
+    StandardResponseSerializer, ErrorResponseSerializer
+)
 from typing import Dict, Any, Optional
 import logging
 import uuid
@@ -66,14 +70,55 @@ class UserRegistrationView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     throttle_classes = [RegisterThrottle]
     
-    @extend_schema(
+    @auth_schema(
         summary="사용자 회원가입",
-        description="새 사용자 계정을 생성하고 이메일 인증 토큰을 발송합니다.",
+        description="""
+        새 사용자 계정을 생성합니다.
+        
+        회원가입 후 이메일 인증 토큰이 발송되며, 
+        계정 활성화를 위해 이메일 인증이 필요합니다.
+        
+        보안을 위해 회원가입 시도는 제한되며, 
+        의심스러운 활동은 차단됩니다.
+        """,
+        request=UserRegistrationSerializer,
         responses={
             201: UserSerializer,
-            400: {"description": "입력 데이터 오류"},
-            429: {"description": "요청 제한 초과"}
-        }
+            400: ErrorResponseSerializer,
+            429: ErrorResponseSerializer
+        },
+        examples=[
+            OpenApiExample(
+                '회원가입 요청',
+                value={
+                    'email': 'newuser@example.com',
+                    'password': 'securepassword123',
+                    'password_confirm': 'securepassword123',
+                    'name': '홍길동',
+                    'agree_to_terms': True,
+                    'agree_to_privacy': True
+                },
+                request_only=True
+            ),
+            OpenApiExample(
+                '회원가입 성공',
+                value={
+                    'success': True,
+                    'message': '회원가입이 완료되었습니다. 이메일을 확인해주세요.',
+                    'data': {
+                        'user': {
+                            'id': 123,
+                            'email': 'newuser@example.com',
+                            'name': '홍길동',
+                            'is_verified': False
+                        }
+                    },
+                    'timestamp': '2024-01-01T12:00:00Z'
+                },
+                response_only=True,
+                status_codes=['201']
+            )
+        ]
     )
     def create(self, request, *args, **kwargs):
         """Create user with enhanced security and email verification"""
@@ -202,6 +247,54 @@ StudyMate 팀
         423: {"description": "계정 잠금"},
         429: {"description": "요청 제한 초과"}
     }
+)
+@auth_schema(
+    summary="사용자 로그인",
+    description="""
+    이메일과 비밀번호를 사용하여 로그인합니다.
+    
+    성공 시 액세스 토큰과 리프레시 토큰을 반환합니다.
+    보안을 위해 로그인 시도는 제한되며, 의심스러운 활동은 차단됩니다.
+    """,
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'email': {
+                    'type': 'string',
+                    'format': 'email',
+                    'description': '사용자 이메일 주소',
+                    'example': 'user@example.com'
+                },
+                'password': {
+                    'type': 'string',
+                    'format': 'password',
+                    'description': '사용자 비밀번호',
+                    'example': 'password123'
+                }
+            },
+            'required': ['email', 'password']
+        }
+    },
+    examples=[
+        OpenApiExample(
+            '로그인 요청',
+            value=APIExamples.LOGIN_REQUEST,
+            request_only=True
+        ),
+        OpenApiExample(
+            '로그인 성공',
+            value=APIExamples.LOGIN_RESPONSE,
+            response_only=True,
+            status_codes=['200']
+        ),
+        OpenApiExample(
+            '로그인 실패',
+            value=APIExamples.AUTHENTICATION_ERROR,
+            response_only=True,
+            status_codes=['401']
+        )
+    ]
 )
 @api_view(['POST'])
 @permission_classes([AllowAny])
