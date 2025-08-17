@@ -8,17 +8,39 @@ import logging
 from .models import (
     Subject, StudySettings, StudySummary, StudyProgress, StudyGoal
 )
+from studymate_api.serializers import (
+    OptimizedModelSerializer, TimestampMixin, CachedMethodField,
+    ListOnlySerializer, DetailOnlySerializer, UserRelatedMixin,
+    PaginationOptimizedSerializer, AnalyticsSerializerMixin
+)
 
 logger = logging.getLogger(__name__)
 
 
-class SubjectSerializer(serializers.ModelSerializer):
-    """Enhanced Subject serializer with statistics and metadata"""
+class SubjectSerializer(OptimizedModelSerializer, TimestampMixin, AnalyticsSerializerMixin):
+    """Enhanced Subject serializer with performance optimizations"""
     
-    statistics = serializers.SerializerMethodField()
+    statistics = CachedMethodField(cache_timeout=900)  # 15 minutes cache
     is_subscribed = serializers.SerializerMethodField()
-    user_progress = serializers.SerializerMethodField()
-    popular_tags = serializers.SerializerMethodField()
+    user_progress = CachedMethodField(cache_timeout=300)  # 5 minutes cache
+    popular_tags = CachedMethodField(cache_timeout=1800)  # 30 minutes cache
+    
+    # Define fields for different contexts
+    list_fields = ['id', 'name', 'category', 'icon', 'color_code', 'total_learners', 'is_active']
+    detail_fields = [
+        'id', 'name', 'description', 'category', 'default_difficulty',
+        'icon', 'color_code', 'total_learners', 'total_summaries',
+        'average_rating', 'is_active', 'requires_premium',
+        'tags', 'keywords', 'statistics', 'is_subscribed',
+        'user_progress', 'popular_tags', 'created_at_display'
+    ]
+    
+    # Cached fields for expensive operations
+    cached_fields = {'statistics', 'user_progress', 'popular_tags'}
+    
+    # Queryset optimization
+    select_related_fields = []
+    prefetch_related_fields = ['user_subjects']
     
     class Meta:
         model = Subject

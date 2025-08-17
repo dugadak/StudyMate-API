@@ -9,6 +9,10 @@ import re
 import logging
 
 from .models import UserProfile, EmailVerificationToken, PasswordResetToken, LoginHistory
+from studymate_api.serializers import (
+    OptimizedModelSerializer, TimestampMixin, CachedMethodField,
+    ListOnlySerializer, DetailOnlySerializer, PerformanceMonitoringMixin
+)
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -43,11 +47,25 @@ class PasswordValidationMixin:
         return password
 
 
-class UserSerializer(serializers.ModelSerializer):
-    """Enhanced user serializer with additional fields and validation"""
+class UserSerializer(OptimizedModelSerializer, TimestampMixin, PerformanceMonitoringMixin):
+    """Enhanced user serializer with performance optimizations"""
     
-    profile_name = serializers.CharField(source='profile.name', read_only=True)
+    profile_name = CachedMethodField(cache_timeout=600)  # 10 minutes cache
     is_verified = serializers.BooleanField(source='is_email_verified', read_only=True)
+    
+    # Define fields for different contexts
+    list_fields = ['id', 'email', 'first_name', 'last_name', 'is_active', 'date_joined']
+    detail_fields = [
+        'id', 'email', 'first_name', 'last_name', 'is_active', 'date_joined',
+        'last_login', 'profile_name', 'is_verified', 'created_at_display'
+    ]
+    
+    # Cached fields for expensive operations
+    cached_fields = {'profile_name'}
+    
+    # Queryset optimization
+    select_related_fields = ['profile']
+    prefetch_related_fields = []
     needs_password_change = serializers.SerializerMethodField()
     last_login_formatted = serializers.SerializerMethodField()
     
@@ -67,6 +85,15 @@ class UserSerializer(serializers.ModelSerializer):
             'email': {'validators': [EmailValidator()]},
             'username': {'min_length': 3, 'max_length': 30},
         }
+    
+    def get_profile_name(self, obj: User) -> Optional[str]:
+        """Get profile name with caching"""
+        try:
+            if hasattr(obj, 'profile') and obj.profile:
+                return obj.profile.name
+        except UserProfile.DoesNotExist:
+            pass
+        return None
     
     def get_needs_password_change(self, obj: User) -> bool:
         """Check if user needs to change password"""
