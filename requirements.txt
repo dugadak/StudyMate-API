@@ -45,6 +45,10 @@ model-bakery==1.17.0
 anthropic==0.7.8
 together==0.2.7
 
+# 보안 강화
+cryptography==42.0.0
+pycryptodome==3.19.0
+
 # 타입 검사 및 코드 품질
 mypy==1.8.0
 django-stubs[compatible-mypy]==4.2.7

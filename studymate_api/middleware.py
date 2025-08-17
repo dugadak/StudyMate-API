@@ -23,6 +23,7 @@ import uuid
 
 from .logging_config import log_api_request, log_performance, log_security_event
 from .exceptions import RateLimitException
+from .security import validate_and_sanitize, SecurityHeaders
 
 logger = logging.getLogger(__name__)
 
@@ -180,12 +181,10 @@ class SecurityMiddleware(MiddlewareMixin):
     
     def process_response(self, request, response):
         """Process response for security headers"""
-        # Add security headers
-        if not settings.DEBUG:
-            response['X-Content-Type-Options'] = 'nosniff'
-            response['X-Frame-Options'] = 'DENY'
-            response['X-XSS-Protection'] = '1; mode=block'
-            response['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # Add comprehensive security headers
+        security_headers = SecurityHeaders.get_security_headers()
+        for header, value in security_headers.items():
+            response[header] = value
         
         # Log authentication failures
         if response.status_code == 401:
@@ -377,11 +376,246 @@ class ErrorTrackingMiddleware(MiddlewareMixin):
         return safe_data
 
 
+class InputSanitizationMiddleware(MiddlewareMixin):
+    """입력 데이터 보안 검증 및 삭제 미들웨어"""
+    
+    def process_request(self, request):
+        """요청 데이터 검증 및 삭제"""
+        # GET 파라미터 검증
+        if request.GET:
+            for key, value in request.GET.items():
+                validation_result = validate_and_sanitize(value, strict=False)
+                if not validation_result['is_safe']:
+                    log_security_event(
+                        event='malicious_get_parameter',
+                        user_id=getattr(request.user, 'id', None) if hasattr(request, 'user') else None,
+                        ip_address=self._get_client_ip(request),
+                        details={
+                            'parameter': key,
+                            'value': value[:100],  # 처음 100자만 로그
+                            'issues': validation_result['issues']
+                        }
+                    )
+                    # 위험한 요청 차단
+                    return JsonResponse({
+                        'error': '요청에 보안 위험이 감지되었습니다.',
+                        'code': 'SECURITY_RISK_DETECTED'
+                    }, status=400)
+        
+        # POST 데이터 검증 (JSON)
+        if request.content_type == 'application/json' and hasattr(request, 'body'):
+            try:
+                import json
+                body_data = json.loads(request.body.decode('utf-8'))
+                validation_result = validate_and_sanitize(body_data, strict=True)
+                
+                if not validation_result['is_safe']:
+                    log_security_event(
+                        event='malicious_post_data',
+                        user_id=getattr(request.user, 'id', None) if hasattr(request, 'user') else None,
+                        ip_address=self._get_client_ip(request),
+                        details={
+                            'content_type': request.content_type,
+                            'issues': validation_result['issues']
+                        }
+                    )
+                    return JsonResponse({
+                        'error': '요청 데이터에 보안 위험이 감지되었습니다.',
+                        'code': 'MALICIOUS_DATA_DETECTED'
+                    }, status=400)
+            
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                # JSON 파싱 실패는 다른 미들웨어에서 처리
+                pass
+            except Exception as e:
+                logger.error(f"Input sanitization error: {e}")
+    
+    def _get_client_ip(self, request) -> Optional[str]:
+        """클라이언트 IP 주소 반환"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR')
+
+
+class CSRFProtectionMiddleware(MiddlewareMixin):
+    """CSRF 보호 강화 미들웨어"""
+    
+    def process_request(self, request):
+        """CSRF 검증"""
+        # API 요청은 기본 CSRF 보호 외에 추가 검증
+        if request.path.startswith('/api/') and request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+            # Referer 헤더 검증
+            referer = request.META.get('HTTP_REFERER')
+            host = request.META.get('HTTP_HOST')
+            
+            if referer and host:
+                from urllib.parse import urlparse
+                referer_host = urlparse(referer).netloc
+                
+                # 다른 도메인에서의 요청 차단
+                if referer_host != host and not self._is_trusted_origin(referer_host):
+                    log_security_event(
+                        event='csrf_attack_attempt',
+                        user_id=getattr(request.user, 'id', None) if hasattr(request, 'user') else None,
+                        ip_address=self._get_client_ip(request),
+                        details={
+                            'referer': referer,
+                            'host': host,
+                            'path': request.path
+                        }
+                    )
+                    return JsonResponse({
+                        'error': 'Cross-site request blocked',
+                        'code': 'CSRF_BLOCKED'
+                    }, status=403)
+    
+    def _is_trusted_origin(self, origin: str) -> bool:
+        """신뢰할 수 있는 origin인지 확인"""
+        trusted_origins = getattr(settings, 'TRUSTED_ORIGINS', [])
+        return origin in trusted_origins
+    
+    def _get_client_ip(self, request) -> Optional[str]:
+        """클라이언트 IP 주소 반환"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR')
+
+
+class SQLInjectionProtectionMiddleware(MiddlewareMixin):
+    """SQL 인젝션 보호 미들웨어"""
+    
+    def __init__(self, get_response):
+        super().__init__(get_response)
+        self.sql_patterns = [
+            r"(\bunion\s+select\b)",
+            r"(\bselect\s+.*\bfrom\b)",
+            r"(\binsert\s+into\b)",
+            r"(\bupdate\s+.*\bset\b)",
+            r"(\bdelete\s+from\b)",
+            r"(\bdrop\s+table\b)",
+            r"(\bexec\s*\()",
+            r"(--\s*$)",
+            r"(/\*.*\*/)",
+            r"(;\s*$)",
+        ]
+        self.sql_regex = re.compile("|".join(self.sql_patterns), re.IGNORECASE | re.MULTILINE)
+    
+    def process_request(self, request):
+        """SQL 인젝션 패턴 검사"""
+        # URL 파라미터 검사
+        query_string = request.META.get('QUERY_STRING', '')
+        if query_string and self.sql_regex.search(query_string):
+            self._log_sql_injection_attempt(request, 'query_string', query_string)
+            return JsonResponse({
+                'error': 'Malicious request detected',
+                'code': 'SQL_INJECTION_BLOCKED'
+            }, status=400)
+        
+        # POST 데이터 검사
+        if request.method == 'POST' and hasattr(request, 'body'):
+            try:
+                body_str = request.body.decode('utf-8')
+                if self.sql_regex.search(body_str):
+                    self._log_sql_injection_attempt(request, 'post_body', body_str[:200])
+                    return JsonResponse({
+                        'error': 'Malicious request detected',
+                        'code': 'SQL_INJECTION_BLOCKED'
+                    }, status=400)
+            except UnicodeDecodeError:
+                pass  # 바이너리 데이터는 검사하지 않음
+    
+    def _log_sql_injection_attempt(self, request, location: str, content: str):
+        """SQL 인젝션 시도 로그"""
+        log_security_event(
+            event='sql_injection_attempt',
+            user_id=getattr(request.user, 'id', None) if hasattr(request, 'user') else None,
+            ip_address=self._get_client_ip(request),
+            details={
+                'location': location,
+                'content': content[:200],
+                'path': request.path,
+                'method': request.method,
+                'user_agent': request.META.get('HTTP_USER_AGENT')
+            }
+        )
+    
+    def _get_client_ip(self, request) -> Optional[str]:
+        """클라이언트 IP 주소 반환"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR')
+
+
+class SessionSecurityMiddleware(MiddlewareMixin):
+    """세션 보안 강화 미들웨어"""
+    
+    def process_request(self, request):
+        """세션 보안 검증"""
+        if hasattr(request, 'session') and request.session.session_key:
+            # 세션 하이재킹 검증
+            stored_ip = request.session.get('_ip_address')
+            current_ip = self._get_client_ip(request)
+            
+            if stored_ip and stored_ip != current_ip:
+                # IP 주소가 변경된 경우 세션 무효화
+                log_security_event(
+                    event='session_hijacking_attempt',
+                    user_id=getattr(request.user, 'id', None) if hasattr(request, 'user') else None,
+                    ip_address=current_ip,
+                    details={
+                        'stored_ip': stored_ip,
+                        'current_ip': current_ip,
+                        'session_key': request.session.session_key[:10] + '...'
+                    }
+                )
+                request.session.flush()
+                return JsonResponse({
+                    'error': 'Session security violation detected',
+                    'code': 'SESSION_HIJACKING_BLOCKED'
+                }, status=401)
+            
+            # User-Agent 검증
+            stored_ua = request.session.get('_user_agent')
+            current_ua = request.META.get('HTTP_USER_AGENT', '')
+            
+            if stored_ua and stored_ua != current_ua:
+                log_security_event(
+                    event='session_user_agent_mismatch',
+                    user_id=getattr(request.user, 'id', None) if hasattr(request, 'user') else None,
+                    ip_address=current_ip,
+                    details={
+                        'stored_ua': stored_ua[:100],
+                        'current_ua': current_ua[:100]
+                    }
+                )
+                # User-Agent 변경은 경고만 로그하고 차단하지는 않음
+        
+        # 새 세션의 경우 보안 정보 저장
+        if hasattr(request, 'session') and not request.session.get('_security_initialized'):
+            request.session['_ip_address'] = self._get_client_ip(request)
+            request.session['_user_agent'] = request.META.get('HTTP_USER_AGENT', '')
+            request.session['_security_initialized'] = True
+    
+    def _get_client_ip(self, request) -> Optional[str]:
+        """클라이언트 IP 주소 반환"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR')
+
+
 # Export middleware classes
 __all__ = [
     'RequestLoggingMiddleware',
     'PerformanceMonitoringMiddleware',
     'SecurityMiddleware',
     'RateLimitMiddleware', 
-    'ErrorTrackingMiddleware'
+    'ErrorTrackingMiddleware',
+    'InputSanitizationMiddleware',
+    'CSRFProtectionMiddleware',
+    'SQLInjectionProtectionMiddleware',
+    'SessionSecurityMiddleware'
 ]
