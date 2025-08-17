@@ -73,6 +73,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'studymate_api.middleware.SecurityMiddleware',
+    'studymate_api.middleware.RequestLoggingMiddleware',
+    'studymate_api.middleware.PerformanceMonitoringMiddleware',
+    'studymate_api.middleware.RateLimitMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -81,6 +85,7 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'studymate_api.middleware.ErrorTrackingMiddleware',
 ]
 
 # Add performance monitoring middleware only in development
@@ -223,7 +228,7 @@ REST_FRAMEWORK = {
         'ai_generation': '20/hour',
         'stripe_webhook': '1000/hour',
     },
-    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    'EXCEPTION_HANDLER': 'studymate_api.exceptions.custom_exception_handler',
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
@@ -825,3 +830,45 @@ if DEBUG and 'debug_toolbar' in INSTALLED_APPS:
         'debug_toolbar.panels.redirects.RedirectsPanel',
         'debug_toolbar.panels.profiling.ProfilingPanel',
     ]
+
+# Error Handling & Logging Configuration
+from studymate_api.logging_config import get_logging_config, setup_logging
+
+# Setup logging configuration
+LOGGING = get_logging_config()
+
+# Initialize logging
+setup_logging()
+
+# Performance Monitoring Settings
+SLOW_REQUEST_THRESHOLD_MS = config('SLOW_REQUEST_THRESHOLD_MS', default=1000, cast=int)
+CRITICAL_REQUEST_THRESHOLD_MS = config('CRITICAL_REQUEST_THRESHOLD_MS', default=5000, cast=int)
+
+# Rate Limiting Settings
+RATE_LIMITS = {
+    'default': {
+        'requests': config('RATE_LIMIT_DEFAULT_REQUESTS', default=1000, cast=int),
+        'window': config('RATE_LIMIT_DEFAULT_WINDOW', default=3600, cast=int)
+    },
+    'api': {
+        'requests': config('RATE_LIMIT_API_REQUESTS', default=500, cast=int),
+        'window': config('RATE_LIMIT_API_WINDOW', default=3600, cast=int)
+    },
+    'auth': {
+        'requests': config('RATE_LIMIT_AUTH_REQUESTS', default=10, cast=int),
+        'window': config('RATE_LIMIT_AUTH_WINDOW', default=300, cast=int)
+    }
+}
+
+# Error Tracking Settings
+ERROR_TRACKING = {
+    'ENABLED': config('ERROR_TRACKING_ENABLED', default=not DEBUG, cast=bool),
+    'SENSITIVE_DATA_FIELDS': [
+        'password', 'token', 'secret', 'key', 'authorization',
+        'stripe_key', 'openai_key', 'api_key', 'access_token',
+        'refresh_token', 'session_key', 'credit_card', 'cvv'
+    ]
+}
+
+# Version information
+VERSION = config('VERSION', default='1.0.0')

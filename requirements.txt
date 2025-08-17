@@ -25,6 +25,7 @@ django-cors-headers==4.7.0
 # 모니터링 & 로깅
 sentry-sdk==1.40.6
 django-silk==5.0.4
+psutil==5.9.8
 
 # 테스팅
 pytest==7.4.4

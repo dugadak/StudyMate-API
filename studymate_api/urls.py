@@ -19,9 +19,16 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from studymate_api.monitoring import health_check, detailed_health_check, system_metrics, application_metrics
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # Health Check & Monitoring
+    path('health/', health_check, name='health-check'),
+    path('health/detailed/', detailed_health_check, name='detailed-health-check'),
+    path('metrics/system/', system_metrics, name='system-metrics'),
+    path('metrics/application/', application_metrics, name='application-metrics'),
     
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
