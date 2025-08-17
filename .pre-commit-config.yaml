@@ -1,0 +1,115 @@
+# Pre-commit 설정 파일
+repos:
+  # 기본 훅
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$
+      - id: end-of-file-fixer
+        exclude: \.md$
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-xml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # Black 코드 포매터
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: [--line-length=120]
+        exclude: ^(venv/|env/|migrations/)
+
+  # isort import 정렬
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=120]
+        exclude: ^(venv/|env/|migrations/)
+
+  # Ruff 린터 (flake8 대체)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.8
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        exclude: ^(venv/|env/|migrations/)
+
+  # MyPy 타입 검사
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [
+          django-stubs[compatible-mypy],
+          djangorestframework-stubs[compatible-mypy],
+          types-redis,
+          types-requests,
+        ]
+        exclude: ^(venv/|env/|migrations/|tests/)
+
+  # Bandit 보안 검사
+  - repo: https://github.com/pycqa/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: ['-r', '.', '-x', 'tests/,venv/,env/']
+        exclude: ^(venv/|env/|tests/)
+
+  # Django 검사
+  - repo: local
+    hooks:
+      - id: django-check
+        name: Django Check
+        entry: python manage.py check
+        language: system
+        types: [python]
+        require_serial: true
+        pass_filenames: false
+
+      - id: django-check-migrations
+        name: Django Check Migrations
+        entry: python manage.py makemigrations --check --dry-run
+        language: system
+        types: [python]
+        require_serial: true
+        pass_filenames: false
+
+  # 보안 검사
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: \.lock$
+
+  # 문서 검사
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: [--convention=google]
+        exclude: ^(venv/|env/|migrations/|tests/)
+
+  # YAML 정렬
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.11.0
+    hooks:
+      - id: pretty-format-yaml
+        args: [--autofix, --indent=2]
+
+# Pre-commit 설정
+default_stages: [commit]
+fail_fast: false
+minimum_pre_commit_version: '3.0.0'

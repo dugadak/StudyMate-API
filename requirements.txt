@@ -45,8 +45,20 @@ model-bakery==1.17.0
 anthropic==0.7.8
 together==0.2.7
 
+# 타입 검사 및 코드 품질
+mypy==1.8.0
+django-stubs[compatible-mypy]==4.2.7
+djangorestframework-stubs[compatible-mypy]==3.14.5
+types-redis==4.6.0.11
+types-requests==2.31.0.20240125
+ruff==0.1.8
+bandit[toml]==1.7.5
+
 # 개발 도구
 black==23.12.1
 flake8==7.0.0
 isort==5.13.2
 pre-commit==3.6.0
+pydocstyle==6.3.0
+pylint==3.0.3
+pylint-django==2.5.5

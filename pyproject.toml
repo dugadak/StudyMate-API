@@ -1,0 +1,230 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "studymate-api"
+version = "1.0.0"
+description = "StudyMate AI-powered learning management API"
+authors = [
+    {name = "StudyMate Team", email = "dev@studymate.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "Django>=5.0",
+    "djangorestframework>=3.14",
+]
+
+[tool.black]
+# Black 코드 포매터 설정
+line-length = 120
+target-version = ['py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    # 표준 제외 디렉토리
+    \.eggs
+    | \.git
+    | \.hg
+    | \.mypy_cache
+    | \.pytest_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+    | venv
+    | env
+    | migrations
+)/
+'''
+
+[tool.isort]
+# isort import 정렬 설정
+profile = "black"
+multi_line_output = 3
+line_length = 120
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+known_first_party = ["studymate_api", "accounts", "study", "quiz", "subscription", "notifications"]
+known_third_party = [
+    "django", "rest_framework", "celery", "redis", "stripe", "openai", 
+    "anthropic", "together", "PIL", "psycopg2", "decouple", "allauth",
+    "sentry_sdk", "silk", "psutil", "faker", "factory", "responses",
+    "freezegun", "model_bakery", "drf_spectacular"
+]
+skip_glob = [
+    "*/migrations/*",
+    "*/venv/*",
+    "*/env/*",
+    "*/__pycache__/*"
+]
+
+[tool.bandit]
+# Bandit 보안 검사 설정
+exclude_dirs = ["tests", "venv", "env", "migrations"]
+skips = ["B101", "B601"]  # assert_used, shell_injection (테스트에서 필요)
+
+[tool.bandit.assert_used]
+skips = ["**/test_*.py", "**/tests.py"]
+
+[tool.coverage.run]
+# Coverage 설정 (pytest-cov와 연동)
+source = ["."]
+omit = [
+    "*/venv/*",
+    "*/env/*",
+    "*/migrations/*",
+    "*/tests/*",
+    "*/test_*",
+    "manage.py",
+    "*/settings/*",
+    "*/wsgi.py",
+    "*/asgi.py",
+    "*/__pycache__/*",
+]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "test_results/coverage_html"
+title = "StudyMate API 테스트 커버리지 리포트"
+
+[tool.ruff]
+# Ruff 린터 설정 (flake8 대체)
+target-version = "py311"
+line-length = 120
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "I",   # isort
+    "N",   # pep8-naming
+    "C90", # mccabe
+    "DJ",  # flake8-django
+]
+ignore = [
+    "E501",  # line too long (black handles this)
+    "B008",  # do not perform function calls in argument defaults
+    "B006",  # do not use mutable data structures for argument defaults
+]
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    "env",
+    ".venv",
+    ".env",
+    "migrations",
+    ".mypy_cache",
+    ".pytest_cache",
+    "node_modules",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401", "F403", "F405"]
+"*/settings.py" = ["E501"]
+"test_*.py" = ["F401", "F403", "F405"]
+"*/migrations/*.py" = ["E501", "F401"]
+
+[tool.ruff.mccabe]
+max-complexity = 12
+
+[tool.ruff.isort]
+known-first-party = ["studymate_api", "accounts", "study", "quiz", "subscription", "notifications"]
+
+[tool.pylint]
+# Pylint 설정
+load-plugins = ["pylint_django"]
+django-settings-module = "studymate_api.settings"
+
+[tool.pylint.messages_control]
+disable = [
+    "C0111",  # missing-docstring
+    "R0903",  # too-few-public-methods (Django models)
+    "R0201",  # no-self-use
+    "W0613",  # unused-argument
+    "C0103",  # invalid-name (Django conventions)
+]
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.basic]
+good-names = ["i", "j", "k", "ex", "Run", "_", "id", "pk"]
+
+[tool.pylint.design]
+max-args = 10
+max-locals = 20
+max-attributes = 15
+
+[tool.mypy]
+# MyPy 타입 검사 설정 (mypy.ini와 동기화)
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+plugins = ["mypy_django_plugin.main"]
+
+[[tool.mypy.overrides]]
+module = [
+    "django.*",
+    "rest_framework.*",
+    "celery.*",
+    "redis.*",
+    "stripe.*",
+    "openai.*",
+    "anthropic.*",
+    "together.*",
+    "PIL.*",
+    "psycopg2.*",
+    "decouple.*",
+    "allauth.*",
+    "sentry_sdk.*",
+    "silk.*",
+    "psutil.*",
+    "faker.*",
+    "factory.*",
+    "responses.*",
+    "freezegun.*",
+    "model_bakery.*",
+    "drf_spectacular.*",
+]
+ignore_missing_imports = true
