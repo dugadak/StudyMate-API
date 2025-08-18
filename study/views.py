@@ -16,6 +16,11 @@ from studymate_api.schema import (
 from studymate_api.advanced_cache import (
     smart_cache, cache_study_content, cache_ai_response, cache_user_profile
 )
+from studymate_api.personalization import (
+    get_personalized_content_recommendations, 
+    update_learning_pattern,
+    get_adaptive_difficulty
+)
 from typing import Dict, Any, Optional
 import logging
 import hashlib
@@ -239,6 +244,85 @@ class SubjectViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(popular_subjects, many=True)
         return Response(serializer.data)
+    
+    @extend_schema(
+        summary="개인화된 과목 추천",
+        description="사용자의 학습 스타일과 선호도를 기반으로 과목을 추천합니다.",
+        parameters=[
+            OpenApiParameter(
+                name="limit",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description="추천 개수 제한 (기본값: 5)"
+            )
+        ]
+    )
+    @action(detail=False, methods=['get'])
+    def personalized_recommendations(self, request):
+        """개인화된 과목 추천"""
+        try:
+            limit = int(request.query_params.get('limit', 5))
+            
+            # 개인화 추천 엔진 사용
+            recommendations = get_personalized_content_recommendations(
+                request.user.id, 
+                subject_id=None,  # 모든 과목 대상
+                limit=limit
+            )
+            
+            # 추천된 과목 ID 추출
+            recommended_subject_ids = []
+            for rec in recommendations:
+                if rec.content_id.startswith('subject_'):
+                    subject_id = int(rec.content_id.replace('subject_', ''))
+                    recommended_subject_ids.append(subject_id)
+            
+            # 실제 과목 객체 조회
+            if recommended_subject_ids:
+                subjects = Subject.objects.filter(
+                    id__in=recommended_subject_ids, 
+                    is_active=True
+                ).order_by(
+                    models.Case(*[
+                        models.When(id=subject_id, then=pos) 
+                        for pos, subject_id in enumerate(recommended_subject_ids)
+                    ])
+                )
+                
+                serializer = self.get_serializer(subjects, many=True)
+                
+                # 추천 이유도 함께 제공
+                subject_data = serializer.data
+                for i, subject in enumerate(subject_data):
+                    if i < len(recommendations):
+                        subject['personalization_reason'] = recommendations[i].personalization_reason
+                        subject['relevance_score'] = recommendations[i].relevance_score
+                
+                return Response({
+                    'recommendations': subject_data,
+                    'total_count': len(subject_data),
+                    'personalization_applied': True
+                })
+            else:
+                # 추천이 없는 경우 인기 과목 반환
+                fallback_subjects = Subject.objects.filter(
+                    is_active=True
+                ).order_by('-total_learners')[:limit]
+                
+                serializer = self.get_serializer(fallback_subjects, many=True)
+                return Response({
+                    'recommendations': serializer.data,
+                    'total_count': len(serializer.data),
+                    'personalization_applied': False,
+                    'fallback_reason': '개인화 데이터 부족으로 인기 과목을 추천합니다.'
+                })
+                
+        except Exception as e:
+            logger.error(f"개인화 추천 실패 - 사용자 {request.user.id}: {e}")
+            return Response({
+                'error': '추천 생성 중 오류가 발생했습니다.',
+                'error_type': 'system_error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class StudySettingsViewSet(viewsets.ModelViewSet):
@@ -797,6 +881,21 @@ class GenerateSummaryView(generics.GenericAPIView):
             
             # Increment subject summary count
             subject.increment_summary_count()
+            
+            # Update learning pattern with new activity
+            try:
+                activity_data = {
+                    'activity_type': 'summary_generation',
+                    'duration': int(generation_time / 60),  # 분 단위
+                    'completion_rate': 1.0,  # 완료됨
+                    'content_type': 'text',
+                    'subject_id': subject_id,
+                    'difficulty': getattr(summary, 'difficulty_level', 'intermediate'),
+                    'performance_score': 0.8,  # 기본 성과 점수
+                }
+                update_learning_pattern(request.user.id, activity_data)
+            except Exception as pattern_error:
+                logger.warning(f"학습 패턴 업데이트 실패: {pattern_error}")
             
             return Response({
                 'summary': StudySummarySerializer(summary, context={'request': request}).data,

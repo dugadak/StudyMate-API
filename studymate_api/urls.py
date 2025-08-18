@@ -18,7 +18,13 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from .views.personalization import PersonalizationViewSet
+
+# API Router for personalization
+router = DefaultRouter()
+router.register(r'personalization', PersonalizationViewSet, basename='personalization')
 urlpatterns = [
     path('admin/', admin.site.urls),
     
@@ -36,6 +42,9 @@ urlpatterns = [
     path('api/quiz/', include('quiz.urls')),
     path('api/subscription/', include('subscription.urls')),
     path('api/notifications/', include('notifications.urls')),
+    
+    # Personalization API
+    path('api/', include(router.urls)),
     
     # Django Allauth
     path('accounts/', include('allauth.urls')),
