@@ -419,6 +419,23 @@ CACHES = {
         },
         'KEY_PREFIX': 'studymate_session',
         'TIMEOUT': config('SESSION_CACHE_TIMEOUT', default=3600, cast=int),
+    },
+    'tagged': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f'{REDIS_URL}/3',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 30,
+                'retry_on_timeout': True,
+                'health_check_interval': 30,
+            },
+            'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+        },
+        'KEY_PREFIX': 'studymate_tagged',
+        'VERSION': 1,
+        'TIMEOUT': 3600,  # 1시간 기본 타임아웃
     }
 }
 
@@ -1024,4 +1041,15 @@ Authorization: Bearer <your-access-token>
             'description': '시스템 상태, 헬스체크, 메트릭 관련 API'
         }
     ]
+}
+
+# 고급 캐시 설정
+ADVANCED_CACHE_SETTINGS = {
+    'ENABLE_CACHE_WARMING': config('ENABLE_CACHE_WARMING', default=True, cast=bool),
+    'AUTO_WARM_POPULAR_CONTENT': config('AUTO_WARM_POPULAR_CONTENT', default=True, cast=bool),
+    'CACHE_WARMING_INTERVAL': config('CACHE_WARMING_INTERVAL', default=3600, cast=int),  # 1시간마다
+    'MAX_CACHE_ENTRIES_PER_STRATEGY': config('MAX_CACHE_ENTRIES_PER_STRATEGY', default=10000, cast=int),
+    'CACHE_STATISTICS_RETENTION_DAYS': config('CACHE_STATISTICS_RETENTION_DAYS', default=30, cast=int),
+    'ENABLE_CACHE_MONITORING': config('ENABLE_CACHE_MONITORING', default=True, cast=bool),
+    'CACHE_HEALTH_CHECK_INTERVAL': config('CACHE_HEALTH_CHECK_INTERVAL', default=300, cast=int),  # 5분마다
 }

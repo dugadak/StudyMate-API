@@ -13,8 +13,12 @@ from studymate_api.schema import (
     study_schema, COMMON_PARAMETERS, APIExamples,
     StandardResponseSerializer, ErrorResponseSerializer, get_paginated_response_schema
 )
+from studymate_api.advanced_cache import (
+    smart_cache, cache_study_content, cache_ai_response, cache_user_profile
+)
 from typing import Dict, Any, Optional
 import logging
+import hashlib
 
 from .models import Subject, StudySettings, StudySummary, StudyProgress, StudyGoal
 from .serializers import (
@@ -43,32 +47,56 @@ class SubjectViewSet(viewsets.ModelViewSet):
     ordering = ['name']
     
     def get_queryset(self):
-        """Get filtered and optimized queryset"""
-        queryset = Subject.objects.filter(is_active=True)
+        """Get filtered and optimized queryset with caching"""
+        # Create cache key based on query parameters
+        cache_key_params = {
+            'category': self.request.query_params.get('category'),
+            'difficulty': self.request.query_params.get('difficulty'),
+            'premium_only': self.request.query_params.get('premium_only'),
+            'subscribed_only': self.request.query_params.get('subscribed_only'),
+            'user_id': self.request.user.id if self.request.query_params.get('subscribed_only') else None
+        }
         
-        # Filter by category
-        category = self.request.query_params.get('category')
-        if category:
-            queryset = queryset.filter(category=category)
+        def get_queryset_func():
+            queryset = Subject.objects.filter(is_active=True)
+            
+            # Filter by category
+            category = self.request.query_params.get('category')
+            if category:
+                queryset = queryset.filter(category=category)
+            
+            # Filter by difficulty
+            difficulty = self.request.query_params.get('difficulty')
+            if difficulty:
+                queryset = queryset.filter(default_difficulty=difficulty)
+            
+            # Filter by premium requirement
+            premium_only = self.request.query_params.get('premium_only')
+            if premium_only and premium_only.lower() == 'true':
+                queryset = queryset.filter(requires_premium=True)
+            elif premium_only and premium_only.lower() == 'false':
+                queryset = queryset.filter(requires_premium=False)
+            
+            # Filter subscribed subjects only
+            subscribed_only = self.request.query_params.get('subscribed_only')
+            if subscribed_only and subscribed_only.lower() == 'true':
+                queryset = queryset.filter(
+                    user_settings__user=self.request.user
+                ).distinct()
+            
+            return queryset
         
-        # Filter by difficulty
-        difficulty = self.request.query_params.get('difficulty')
-        if difficulty:
-            queryset = queryset.filter(default_difficulty=difficulty)
+        # Use study content caching
+        filter_hash = hashlib.md5(str(cache_key_params).encode()).hexdigest()
+        queryset = cache_study_content(
+            subject_id=0,  # 0 for subject list
+            difficulty=filter_hash,
+            value_func=get_queryset_func
+        )
         
-        # Filter by premium requirement
-        premium_only = self.request.query_params.get('premium_only')
-        if premium_only and premium_only.lower() == 'true':
-            queryset = queryset.filter(requires_premium=True)
-        elif premium_only and premium_only.lower() == 'false':
-            queryset = queryset.filter(requires_premium=False)
-        
-        # Filter subscribed subjects only
-        subscribed_only = self.request.query_params.get('subscribed_only')
-        if subscribed_only and subscribed_only.lower() == 'true':
-            queryset = queryset.filter(
-                user_settings__user=self.request.user
-            ).distinct()
+        if not isinstance(queryset, models.QuerySet):
+            # If cached value is not a QuerySet, fallback to normal queryset
+            queryset = get_queryset_func()
         
         return queryset.annotate(
             user_summary_count=Count(
@@ -735,14 +763,30 @@ class GenerateSummaryView(generics.GenericAPIView):
             }, status=status.HTTP_403_FORBIDDEN)
         
         try:
-            # Generate summary
+            # Generate summary with advanced caching
             summary_service = StudySummaryService()
             start_time = timezone.now()
             
-            summary = summary_service.generate_summary(
-                user=request.user,
-                subject_id=subject_id,
-                custom_prompt=custom_prompt
+            # Create cache key for AI response
+            prompt_data = {
+                'subject_id': subject_id,
+                'custom_prompt': custom_prompt or '',
+                'user_preferences': request.user.learning_language if hasattr(request.user, 'learning_language') else 'ko'
+            }
+            prompt_hash = hashlib.md5(str(prompt_data).encode()).hexdigest()
+            
+            # Try to get from AI response cache first
+            def generate_summary_func():
+                return summary_service.generate_summary(
+                    user=request.user,
+                    subject_id=subject_id,
+                    custom_prompt=custom_prompt
+                )
+            
+            summary = cache_ai_response(
+                prompt_hash=prompt_hash,
+                model='openai',  # or get from settings
+                value_func=generate_summary_func
             )
             
             generation_time = (timezone.now() - start_time).total_seconds()
