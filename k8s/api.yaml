@@ -1,0 +1,163 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-pvc
+  namespace: studymate
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: studymate-api
+  namespace: studymate
+  labels:
+    app: studymate-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: studymate-api
+  template:
+    metadata:
+      labels:
+        app: studymate-api
+    spec:
+      containers:
+      - name: studymate-api
+        image: studymate/api:latest
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: studymate-api-config
+        - secretRef:
+            name: studymate-api-secrets
+        volumeMounts:
+        - name: media-storage
+          mountPath: /app/media
+        livenessProbe:
+          httpGet:
+            path: /health/alive/
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready/
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: media-storage
+        persistentVolumeClaim:
+          claimName: media-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: studymate-api-service
+  namespace: studymate
+spec:
+  selector:
+    app: studymate-api
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: studymate-celery
+  namespace: studymate
+  labels:
+    app: studymate-celery
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: studymate-celery
+  template:
+    metadata:
+      labels:
+        app: studymate-celery
+    spec:
+      containers:
+      - name: studymate-celery
+        image: studymate/api:latest
+        command: ["celery", "-A", "studymate_api", "worker", "-l", "info", "--concurrency=2"]
+        envFrom:
+        - configMapRef:
+            name: studymate-api-config
+        - secretRef:
+            name: studymate-api-secrets
+        volumeMounts:
+        - name: media-storage
+          mountPath: /app/media
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "300m"
+      volumes:
+      - name: media-storage
+        persistentVolumeClaim:
+          claimName: media-pvc
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: studymate-celery-beat
+  namespace: studymate
+  labels:
+    app: studymate-celery-beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: studymate-celery-beat
+  template:
+    metadata:
+      labels:
+        app: studymate-celery-beat
+    spec:
+      containers:
+      - name: studymate-celery-beat
+        image: studymate/api:latest
+        command: ["celery", "-A", "studymate_api", "beat", "-l", "info", "--scheduler", "django_celery_beat.schedulers:DatabaseScheduler"]
+        envFrom:
+        - configMapRef:
+            name: studymate-api-config
+        - secretRef:
+            name: studymate-api-secrets
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "100m"

@@ -1,0 +1,44 @@
+# 개발 환경용 Dockerfile
+FROM python:3.11-slim
+
+# 환경변수 설정
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# 시스템 의존성 설치
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# Python 의존성 설치
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# 개발용 추가 패키지 설치
+RUN pip install \
+    django-debug-toolbar \
+    django-extensions \
+    ipython \
+    jupyter
+
+# 애플리케이션 코드 복사
+COPY . .
+
+# 권한 설정
+RUN chmod +x docker/entrypoint.sh docker/wait_for_db.py
+
+# 포트 노출
+EXPOSE 8000
+
+# 엔트리포인트 설정
+ENTRYPOINT ["./docker/entrypoint.sh"]
+
+# 기본 명령어 (개발 서버)
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

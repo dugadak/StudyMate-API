@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: studymate-api-config
+  namespace: studymate
+data:
+  DEBUG: "false"
+  ENVIRONMENT: "production"
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "studymate"
+  REDIS_URL: "redis://redis-service:6379/1"
+  CELERY_BROKER_URL: "redis://redis-service:6379/0"
+  MEDIA_URL: "/media/"
+  STATIC_URL: "/static/"
+  LOG_LEVEL: "INFO"
+  CACHE_TTL: "3600"
+  GUNICORN_WORKERS: "4"
+  COLLECT_STATIC: "true"
+  ERROR_RATE_THRESHOLD: "10"
+  RESPONSE_TIME_THRESHOLD: "2000"
