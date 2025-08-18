@@ -17,6 +17,9 @@ from studymate_api.schema import (
     auth_schema, COMMON_PARAMETERS, APIExamples, 
     StandardResponseSerializer, ErrorResponseSerializer
 )
+from studymate_api.metrics import (
+    track_user_event, track_business_event, EventType
+)
 from typing import Dict, Any, Optional
 import logging
 import uuid
@@ -159,6 +162,15 @@ class UserRegistrationView(generics.CreateAPIView):
                 )
                 
                 logger.info(f"User registered successfully: {user.email} from {ip_address}")
+                
+                # Track user registration event
+                track_business_event(EventType.USER_REGISTER, metadata={
+                    'user_id': user.id,
+                    'email': user.email,
+                    'ip_address': ip_address,
+                    'user_agent': user_agent[:100],
+                    'registration_method': 'email'
+                })
                 
                 # Create token for immediate login (optional)
                 token, created = Token.objects.get_or_create(user=user)
@@ -352,6 +364,13 @@ def login_view(request):
             token, created = Token.objects.get_or_create(user=user)
             
             logger.info(f"Successful login: {user.email} from {ip_address}")
+            
+            # Track successful login event
+            track_user_event(EventType.USER_LOGIN, user.id, {
+                'ip_address': ip_address,
+                'user_agent': user_agent[:100],  # 최대 100자
+                'login_method': 'password'
+            })
             
             response_data = {
                 'user': UserSerializer(user).data,

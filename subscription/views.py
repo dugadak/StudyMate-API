@@ -25,6 +25,9 @@ from .serializers import (
     DiscountSerializer, DiscountValidationSerializer, DiscountUsageSerializer,
     SubscriptionAnalyticsSerializer, SubscriptionCreateSerializer
 )
+from studymate_api.metrics import (
+    track_user_event, track_business_event, EventType
+)
 
 logger = logging.getLogger(__name__)
 
@@ -659,6 +662,15 @@ class SubscriptionCreateView(generics.CreateAPIView):
             with transaction.atomic():
                 result = serializer.save()
                 
+                # Track subscription started event
+                track_business_event(EventType.SUBSCRIPTION_STARTED, metadata={
+                    'user_id': request.user.id,
+                    'subscription_id': result['subscription'].id,
+                    'plan_name': result['subscription'].plan.name,
+                    'plan_price': float(result['subscription'].plan.price),
+                    'stripe_subscription_id': result['stripe_subscription'].id
+                })
+                
                 return Response({
                     'message': '구독이 성공적으로 생성되었습니다.',
                     'subscription_id': result['subscription'].id,
@@ -723,6 +735,8 @@ class WebhookView(generics.GenericAPIView):
     def _handle_payment_succeeded(self, invoice_data):
         """Handle successful payment"""
         subscription_id = invoice_data.get('subscription')
+        amount = invoice_data.get('amount_paid', 0) / 100  # Stripe amounts are in cents
+        
         if subscription_id:
             try:
                 subscription = UserSubscription.objects.get(
@@ -730,12 +744,26 @@ class WebhookView(generics.GenericAPIView):
                 )
                 subscription.sync_with_stripe()
                 logger.info(f"Payment succeeded for subscription {subscription.id}")
+                
+                # Track payment success event
+                track_business_event(EventType.PAYMENT_SUCCESS, value=amount, metadata={
+                    'user_id': subscription.user.id,
+                    'subscription_id': subscription.id,
+                    'plan_name': subscription.plan.name,
+                    'amount': amount,
+                    'currency': invoice_data.get('currency', 'usd'),
+                    'stripe_invoice_id': invoice_data.get('id'),
+                    'payment_method': 'stripe'
+                })
+                
             except UserSubscription.DoesNotExist:
                 logger.warning(f"Subscription not found for Stripe ID: {subscription_id}")
     
     def _handle_payment_failed(self, invoice_data):
         """Handle failed payment"""
         subscription_id = invoice_data.get('subscription')
+        amount = invoice_data.get('amount_due', 0) / 100  # Stripe amounts are in cents
+        
         if subscription_id:
             try:
                 subscription = UserSubscription.objects.get(
@@ -744,6 +772,18 @@ class WebhookView(generics.GenericAPIView):
                 subscription.status = 'past_due'
                 subscription.save()
                 logger.info(f"Payment failed for subscription {subscription.id}")
+                
+                # Track payment failure event
+                track_business_event(EventType.PAYMENT_FAILED, metadata={
+                    'user_id': subscription.user.id,
+                    'subscription_id': subscription.id,
+                    'plan_name': subscription.plan.name,
+                    'amount': amount,
+                    'currency': invoice_data.get('currency', 'usd'),
+                    'stripe_invoice_id': invoice_data.get('id'),
+                    'failure_reason': invoice_data.get('last_finalization_error', {}).get('message', 'unknown')
+                })
+                
             except UserSubscription.DoesNotExist:
                 logger.warning(f"Subscription not found for Stripe ID: {subscription_id}")
     
@@ -770,6 +810,17 @@ class WebhookView(generics.GenericAPIView):
             subscription.canceled_at = timezone.now()
             subscription.save()
             logger.info(f"Subscription canceled: {subscription.id}")
+            
+            # Track subscription cancellation event
+            track_business_event(EventType.SUBSCRIPTION_CANCELLED, metadata={
+                'user_id': subscription.user.id,
+                'subscription_id': subscription.id,
+                'plan_name': subscription.plan.name,
+                'plan_price': float(subscription.plan.price),
+                'subscription_duration_days': (timezone.now() - subscription.started_at).days,
+                'cancellation_reason': subscription_data.get('cancellation_details', {}).get('reason', 'unknown')
+            })
+            
         except UserSubscription.DoesNotExist:
             logger.warning(f"Subscription not found for Stripe ID: {subscription_id}")
     

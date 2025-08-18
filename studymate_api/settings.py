@@ -76,6 +76,7 @@ MIDDLEWARE = [
     'studymate_api.middleware.SecurityMiddleware',
     'studymate_api.middleware.RequestLoggingMiddleware',
     'studymate_api.middleware.PerformanceMonitoringMiddleware',
+    'studymate_api.metrics.MetricsMiddleware',
     'studymate_api.middleware.RateLimitMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

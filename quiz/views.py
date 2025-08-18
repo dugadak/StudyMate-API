@@ -24,6 +24,9 @@ from .serializers import (
 from .filters import QuizFilter, QuizAttemptFilter, QuizSessionFilter
 from .pagination import QuizPagination
 from study.models import Subject
+from studymate_api.metrics import (
+    track_user_event, track_business_event, EventType
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +154,27 @@ class QuizViewSet(viewsets.ModelViewSet):
             ]
         
         logger.info(f"Quiz attempt: {request.user.email} -> {quiz.title} ({'정답' if attempt.is_correct else '오답'})")
+        
+        # Track quiz attempt event
+        track_user_event(EventType.QUIZ_ATTEMPTED, request.user.id, {
+            'quiz_id': quiz.id,
+            'quiz_title': quiz.title[:100],
+            'quiz_type': quiz.quiz_type,
+            'difficulty_level': quiz.difficulty_level,
+            'is_correct': attempt.is_correct,
+            'time_spent': attempt.time_spent_seconds,
+            'points_earned': attempt.total_points
+        })
+        
+        # Track completion if answer is correct
+        if attempt.is_correct:
+            track_user_event(EventType.QUIZ_COMPLETED, request.user.id, {
+                'quiz_id': quiz.id,
+                'quiz_title': quiz.title[:100],
+                'difficulty_level': quiz.difficulty_level,
+                'points_earned': attempt.total_points,
+                'time_spent': attempt.time_spent_seconds
+            })
         
         return Response(response_data, status=status.HTTP_201_CREATED)
     

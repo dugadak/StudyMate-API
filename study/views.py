@@ -21,6 +21,9 @@ from studymate_api.personalization import (
     update_learning_pattern,
     get_adaptive_difficulty
 )
+from studymate_api.metrics import (
+    track_user_event, track_business_event, EventType
+)
 from typing import Dict, Any, Optional
 import logging
 import hashlib
@@ -878,6 +881,14 @@ class GenerateSummaryView(generics.GenericAPIView):
             # Log successful generation
             logger.info(f"Summary generated successfully for user {request.user.email}, "
                        f"subject {subject.name}, time: {generation_time:.2f}s")
+            
+            # Track summary generation event
+            track_user_event(EventType.SUMMARY_GENERATED, request.user.id, {
+                'subject_id': subject_id,
+                'subject_name': subject.name,
+                'generation_time': generation_time,
+                'custom_prompt_used': bool(custom_prompt)
+            })
             
             # Increment subject summary count
             subject.increment_summary_count()

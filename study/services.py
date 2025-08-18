@@ -16,6 +16,9 @@ import anthropic
 import requests
 
 from .models import StudySummary, Subject, StudySettings, StudyProgress
+from studymate_api.metrics import (
+    track_ai_event, track_system_event, EventType
+)
 
 User = get_user_model()
 logger = logging.getLogger('study.services')
@@ -293,6 +296,16 @@ class StudySummaryService:
             logger.info(f"OpenAI generation completed in {generation_time:.2f}s, "
                        f"tokens: {response.usage.total_tokens}")
             
+            # Track successful AI request
+            track_ai_event(EventType.AI_REQUEST, 'openai', {
+                'model': model,
+                'response_time': generation_time,
+                'total_tokens': response.usage.total_tokens,
+                'prompt_tokens': response.usage.prompt_tokens,
+                'completion_tokens': response.usage.completion_tokens,
+                'status': 'success'
+            })
+            
             # Validate content
             if not content or len(content) < 50:
                 raise ContentFilterError("생성된 콘텐츠가 너무 짧습니다.", "openai")
@@ -300,12 +313,24 @@ class StudySummaryService:
             return content
             
         except openai.RateLimitError as e:
+            track_ai_event(EventType.AI_ERROR, 'openai', {
+                'error_type': 'rate_limit',
+                'error_message': str(e)
+            })
             raise RateLimitError(f"OpenAI 요청 한도 초과: {str(e)}", "openai")
         except openai.APIError as e:
+            track_ai_event(EventType.AI_ERROR, 'openai', {
+                'error_type': 'api_error',
+                'error_message': str(e)
+            })
             if "content_filter" in str(e).lower():
                 raise ContentFilterError(f"OpenAI 콘텐츠 필터: {str(e)}", "openai")
             raise AIModelError(f"OpenAI API 오류: {str(e)}", "openai")
         except Exception as e:
+            track_ai_event(EventType.AI_ERROR, 'openai', {
+                'error_type': 'general_error',
+                'error_message': str(e)
+            })
             raise AIModelError(f"OpenAI 요청 실패: {str(e)}", "openai")
     
     def _generate_with_anthropic(self, study_settings: StudySettings,

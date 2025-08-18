@@ -21,10 +21,12 @@ from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from .views.personalization import PersonalizationViewSet
+from .views.metrics import MetricsViewSet
 
-# API Router for personalization
+# API Router for personalization and metrics
 router = DefaultRouter()
 router.register(r'personalization', PersonalizationViewSet, basename='personalization')
+router.register(r'metrics', MetricsViewSet, basename='metrics')
 urlpatterns = [
     path('admin/', admin.site.urls),
     
