@@ -22,6 +22,7 @@ from studymate_api.metrics import (
 from .tracing_decorators import (
     trace_study_operation, trace_ai_generation, trace_database_operation, trace_cache_access
 )
+from .ab_testing_integration import generate_summary_with_ab_test
 
 User = get_user_model()
 logger = logging.getLogger('study.services')
@@ -103,18 +104,19 @@ class StudySummaryService:
                     logger.info(f"Using cached summary for user {user.email}, subject {subject.name}")
                     return self._create_summary_from_cache(user, subject, cached_summary)
                 
-                # Generate content using AI
-                content = self._generate_content_with_fallback(
-                    study_settings, custom_prompt
+                # Generate content using AI with A/B testing
+                content, ab_test_info = self._generate_content_with_ab_testing(
+                    user, study_settings, custom_prompt, subject_id
                 )
                 
-                # Create summary object
+                # Create summary object with A/B test metadata
                 summary = StudySummary.objects.create(
                     user=user,
                     subject=subject,
                     title=f"{subject.name} 학습 요약",
                     content=content,
-                    difficulty_level=study_settings.preferred_depth
+                    difficulty_level=study_settings.preferred_depth,
+                    metadata=ab_test_info  # A/B 테스트 정보 저장
                 )
                 
                 # Cache the result
@@ -198,6 +200,28 @@ class StudySummaryService:
         )
     
     @trace_ai_generation("multi_provider")
+    def _generate_content_with_ab_testing(self, user: User, study_settings: StudySettings, 
+                                         custom_prompt: Optional[str] = None, subject_id: int = None) -> tuple[str, Dict[str, Any]]:
+        """Generate content using A/B testing for AI model selection"""
+        try:
+            # 프롬프트 텍스트 생성
+            prompt_text = custom_prompt or self._create_prompt(study_settings)
+            
+            # A/B 테스트로 요약 생성
+            content, ab_test_info = generate_summary_with_ab_test(
+                user_id=user.id,
+                text=prompt_text,
+                subject_id=subject_id or study_settings.subject.id
+            )
+            
+            return content, ab_test_info
+            
+        except Exception as e:
+            logger.warning(f"A/B testing failed, falling back to traditional method: {e}")
+            # A/B 테스트 실패 시 기존 방식으로 폴백
+            content = self._generate_content_with_fallback(study_settings, custom_prompt)
+            return content, {'model_used': 'fallback', 'ab_test_active': False}
+
     def _generate_content_with_fallback(self, study_settings: StudySettings, 
                                       custom_prompt: Optional[str] = None) -> str:
         """Generate content with multiple AI providers as fallback"""

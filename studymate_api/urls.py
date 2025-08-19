@@ -48,6 +48,9 @@ urlpatterns = [
     # CQRS API (명령/조회 분리 패턴)
     path('api/cqrs/', include('studymate_api.cqrs_urls')),
     
+    # A/B Testing API
+    path('api/ab-testing/', include('studymate_api.urls.ab_testing_urls')),
+    
     # Personalization API
     path('api/', include(router.urls)),
     
