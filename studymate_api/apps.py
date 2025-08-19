@@ -29,6 +29,10 @@ class StudymateApiConfig(AppConfig):
             if getattr(settings, 'REALTIME_ANALYTICS', {}).get('ENABLE_NOTIFICATIONS', True):
                 self._initialize_realtime_analytics()
             
+            # 자동 복구 시스템 초기화
+            if getattr(settings, 'AUTO_RECOVERY_ENABLED', True):
+                self._initialize_auto_recovery()
+            
             # 성능 모니터링 초기화
             self._initialize_performance_monitoring()
             
@@ -54,6 +58,19 @@ class StudymateApiConfig(AppConfig):
             pass
         except Exception as e:
             logger.warning(f"실시간 분석 시스템 초기화 실패: {e}")
+    
+    def _initialize_auto_recovery(self):
+        """자동 복구 시스템 초기화"""
+        try:
+            from .auto_recovery_config import initialize_auto_recovery
+            from .auto_recovery import start_monitoring
+            
+            # 초기화 및 모니터링 시작
+            initialize_auto_recovery()
+            start_monitoring()
+            logger.info("자동 복구 시스템 초기화 및 모니터링 시작 완료")
+        except Exception as e:
+            logger.warning(f"자동 복구 시스템 초기화 실패: {e}")
     
     def _initialize_performance_monitoring(self):
         """성능 모니터링 초기화"""

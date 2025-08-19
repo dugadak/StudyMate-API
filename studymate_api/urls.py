@@ -51,6 +51,9 @@ urlpatterns = [
     # A/B Testing API
     path('api/ab-testing/', include('studymate_api.urls.ab_testing_urls')),
     
+    # Auto Recovery API
+    path('api/auto-recovery/', include('studymate_api.urls.auto_recovery_urls')),
+    
     # Personalization API
     path('api/', include(router.urls)),
     
