@@ -100,10 +100,16 @@ AI 기반 개인화 학습 플랫폼 StudyMate의 엔터프라이즈급 서버 �
 - **Celery**: 비동기 작업 처리
 - **Redis**: 메시지 브로커
 
-### **Development & Deployment**
-- **Docker**: 컨테이너화
-- **GitHub Actions**: CI/CD
-- **AWS/GCP**: 클라우드 인프라 (예정)
+### **Development & Deployment** ✨ **CI/CD 파이프라인 완성!**
+- **Docker**: 컨테이너화 및 마이크로서비스
+- **GitHub Actions**: 완전 자동화된 CI/CD 파이프라인
+  - 코드 품질 검사 (Black, Flake8, MyPy)
+  - 자동 테스트 및 커버리지
+  - 보안 스캔 (Bandit, Safety)
+  - 성능 테스트 및 벤치마크
+  - 자동 배포 (Kubernetes)
+- **Kubernetes**: 오케스트레이션 및 확장성
+- **AWS/GCP**: 클라우드 인프라
 
 ### **Monitoring & Observability** ✨ **대폭 업그레이드!**
 - **OpenTelemetry**: 분산 추적 시스템
