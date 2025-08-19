@@ -46,6 +46,7 @@ IS_STAGING = ENVIRONMENT == 'staging'
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # WebSocket 지원을 위해 최상단에 배치
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -58,6 +59,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'rest_framework_simplejwt',
     'corsheaders',
+    'channels',  # WebSocket 지원
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -111,6 +113,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'studymate_api.wsgi.application'
+ASGI_APPLICATION = 'studymate_api.asgi.application'
 
 
 # Database
@@ -293,6 +296,48 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
 CELERY_BEAT_SCHEDULE = {}
+# Django Channels 설정
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [config('REDIS_URL', default='redis://localhost:6379/1')],
+            "capacity": 1500,  # 채널당 최대 메시지 수
+            "expiry": 60,      # 메시지 만료 시간 (초)
+            "group_expiry": 86400,  # 그룹 만료 시간 (초)
+            "channel_capacity": {
+                "http.request": 200,
+                "websocket.send": 10,
+                "websocket.receive": 10,
+            },
+        },
+    },
+}
+
+# 실시간 분석 설정
+REALTIME_ANALYTICS = {
+    'ANALYSIS_INTERVAL': config('REALTIME_ANALYSIS_INTERVAL', default=30, cast=int),  # 초
+    'FOCUS_WINDOW': config('REALTIME_FOCUS_WINDOW', default=300, cast=int),  # 초
+    'PREDICTION_HORIZON': config('REALTIME_PREDICTION_HORIZON', default=3600, cast=int),  # 초
+    'LOW_FOCUS_THRESHOLD': config('REALTIME_LOW_FOCUS_THRESHOLD', default=70, cast=float),
+    'HIGH_EFFICIENCY_THRESHOLD': config('REALTIME_HIGH_EFFICIENCY_THRESHOLD', default=85, cast=float),
+    'BREAK_RECOMMENDATION_THRESHOLD': config('REALTIME_BREAK_THRESHOLD', default=45, cast=int),  # 분
+    'MAX_ACTIVE_SESSIONS': config('REALTIME_MAX_SESSIONS', default=1000, cast=int),
+    'SESSION_TIMEOUT': config('REALTIME_SESSION_TIMEOUT', default=7200, cast=int),  # 초 (2시간)
+    'ENABLE_PREDICTIONS': config('REALTIME_ENABLE_PREDICTIONS', default=True, cast=bool),
+    'ENABLE_NOTIFICATIONS': config('REALTIME_ENABLE_NOTIFICATIONS', default=True, cast=bool),
+}
+
+# 스트리밍 처리 설정
+STREAMING_CONFIG = {
+    'BUFFER_SIZE': config('STREAMING_BUFFER_SIZE', default=10000, cast=int),
+    'BATCH_SIZE': config('STREAMING_BATCH_SIZE', default=100, cast=int),
+    'FLUSH_INTERVAL': config('STREAMING_FLUSH_INTERVAL', default=30.0, cast=float),
+    'MAX_PROCESSING_QUEUES': config('STREAMING_MAX_QUEUES', default=50, cast=int),
+    'METRICS_UPDATE_INTERVAL': config('STREAMING_METRICS_INTERVAL', default=10, cast=int),
+    'AUTO_START': config('STREAMING_AUTO_START', default=True, cast=bool),
+}
+
 CELERY_TASK_ROUTES = {
     'notifications.tasks.*': {'queue': 'notifications'},
     'study.tasks.*': {'queue': 'ai_tasks'},

@@ -58,6 +58,11 @@ types-requests==2.31.0.20240125
 ruff==0.1.8
 bandit[toml]==1.7.5
 
+# 실시간 통신
+channels==4.0.0
+channels-redis==4.2.0
+daphne==4.1.0
+
 # 개발 도구
 black==23.12.1
 flake8==7.0.0

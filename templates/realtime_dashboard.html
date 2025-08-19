@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyMate - 실시간 학습 분석 대시보드</title>
+    
+    <!-- CSS 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            color: #4a5568;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #48bb78;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-indicator.disconnected {
+            background-color: #f56565;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card h3 {
+            color: #4a5568;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .metric:last-child {
+            border-bottom: none;
+        }
+        
+        .metric-label {
+            color: #718096;
+            font-weight: 500;
+        }
+        
+        .metric-value {
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #e2e8f0;
+            border-radius: 4px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .chart-container {
+            grid-column: 1 / -1;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }
+        
+        .alert {
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        
+        .alert-success {
+            background-color: #f0fff4;
+            border-color: #38a169;
+            color: #276749;
+        }
+        
+        .alert-warning {
+            background-color: #fffaf0;
+            border-color: #ed8936;
+            color: #744210;
+        }
+        
+        .alert-danger {
+            background-color: #fed7d7;
+            border-color: #e53e3e;
+            color: #742a2a;
+        }
+        
+        .alert-info {
+            background-color: #ebf8ff;
+            border-color: #3182ce;
+            color: #2a4365;
+        }
+        
+        .recommendations {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .recommendation-item {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 4px solid #4299e1;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #718096;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #4299e1;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification-success {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+        
+        .notification-error {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        }
+        
+        .notification-warning {
+            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+        }
+        
+        .notification-info {
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+        }
+        
+        .session-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .session-info h4 {
+            margin-bottom: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+            
+            .chart-wrapper {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 -->
+        <div class="header">
+            <h1>
+                📊 실시간 학습 분석 대시보드
+                <div class="status-indicator" id="connectionStatus"></div>
+            </h1>
+            <p>실시간으로 학습 패턴을 분석하고 개인화된 피드백을 제공합니다.</p>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="startSession()">학습 세션 시작</button>
+                <button class="btn btn-danger" onclick="endSession()">세션 종료</button>
+                <button class="btn btn-success" onclick="refreshData()">데이터 새로고침</button>
+                <select id="subjectSelect" class="btn" style="background: white; color: #333;">
+                    <option value="">과목 선택</option>
+                    <option value="1">수학</option>
+                    <option value="2">영어</option>
+                    <option value="3">과학</option>
+                    <option value="4">역사</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- 현재 세션 정보 -->
+        <div id="currentSession" class="session-info" style="display: none;">
+            <h4>📚 현재 학습 세션</h4>
+            <div id="sessionDetails"></div>
+        </div>
+        
+        <!-- 대시보드 그리드 -->
+        <div class="dashboard-grid">
+            <!-- 실시간 메트릭 -->
+            <div class="card">
+                <h3>⚡ 실시간 메트릭</h3>
+                <div class="metric">
+                    <span class="metric-label">집중도</span>
+                    <span class="metric-value" id="focusScore">100%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="focusProgress" style="width: 100%;"></div>
+                </div>
+                
+                <div class="metric">
+                    <span class="metric-label">학습 속도</span>
+                    <span class="metric-value" id="learningVelocity">0.0 단위/시간</span>
+                </div>
+                
+                <div class="metric">
+                    <span class="metric-label">효율성 점수</span>
+                    <span class="metric-value" id="efficiencyScore">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="efficiencyProgress" style="width: 0%;"></div>
+                </div>
+                
+                <div class="metric">
+                    <span class="metric-label">학습 시간</span>
+                    <span class="metric-value" id="studyTime">0분</span>
+                </div>
+            </div>
+            
+            <!-- 학습 상태 -->
+            <div class="card">
+                <h3>📈 학습 상태</h3>
+                <div class="metric">
+                    <span class="metric-label">현재 상태</span>
+                    <span class="metric-value" id="currentState">대기 중</span>
+                </div>
+                
+                <div class="metric">
+                    <span class="metric-label">총 이벤트</span>
+                    <span class="metric-value" id="totalEvents">0개</span>
+                </div>
+                
+                <div class="metric">
+                    <span class="metric-label">마지막 활동</span>
+                    <span class="metric-value" id="lastActivity">-</span>
+                </div>
+                
+                <div class="metric">
+                    <span class="metric-label">예상 완료</span>
+                    <span class="metric-value" id="estimatedCompletion">-</span>
+                </div>
+            </div>
+            
+            <!-- 권장사항 -->
+            <div class="card">
+                <h3>💡 권장사항</h3>
+                <div class="recommendations" id="recommendations">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        실시간 권장사항을 분석 중입니다...
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 알림 -->
+            <div class="card">
+                <h3>🔔 실시간 알림</h3>
+                <div id="alerts">
+                    <div class="alert alert-info">
+                        실시간 분석 시스템이 준비되었습니다.
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 차트 섹션 -->
+        <div class="chart-container">
+            <h3>📊 집중도 및 효율성 추이</h3>
+            <div class="chart-wrapper">
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 알림 컨테이너 -->
+    <div id="notificationContainer"></div>
+    
+    <script>
+        // 전역 변수
+        let websocket = null;
+        let currentSessionId = null;
+        let performanceChart = null;
+        let isConnected = false;
+        
+        // 차트 데이터
+        const chartData = {
+            labels: [],
+            focusData: [],
+            efficiencyData: []
+        };
+        
+        // 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeChart();
+            connectWebSocket();
+            
+            // 5초마다 연결 상태 확인
+            setInterval(checkConnection, 5000);
+            
+            // 테스트 이벤트 시뮬레이션 (개발용)
+            if (window.location.hostname === 'localhost') {
+                setTimeout(simulateTestEvents, 3000);
+            }
+        });
+        
+        // WebSocket 연결
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/learning/analytics/`;
+            
+            try {
+                websocket = new WebSocket(wsUrl);
+                
+                websocket.onopen = function(event) {
+                    console.log('WebSocket 연결 성공');
+                    updateConnectionStatus(true);
+                    showNotification('실시간 분석 시스템에 연결되었습니다.', 'success');
+                };
+                
+                websocket.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                };
+                
+                websocket.onclose = function(event) {
+                    console.log('WebSocket 연결 종료');
+                    updateConnectionStatus(false);
+                    showNotification('연결이 끊어졌습니다. 재연결을 시도합니다.', 'warning');
+                    
+                    // 3초 후 재연결 시도
+                    setTimeout(connectWebSocket, 3000);
+                };
+                
+                websocket.onerror = function(error) {
+                    console.error('WebSocket 오류:', error);
+                    updateConnectionStatus(false);
+                    showNotification('연결 오류가 발생했습니다.', 'error');
+                };
+                
+            } catch (error) {
+                console.error('WebSocket 연결 실패:', error);
+                updateConnectionStatus(false);
+            }
+        }
+        
+        // WebSocket 메시지 처리
+        function handleWebSocketMessage(data) {
+            console.log('수신된 메시지:', data);
+            
+            switch (data.type) {
+                case 'connection_established':
+                    break;
+                    
+                case 'session_started':
+                    currentSessionId = data.session_id;
+                    updateSessionInfo(data);
+                    showNotification('학습 세션이 시작되었습니다.', 'success');
+                    break;
+                    
+                case 'session_ended':
+                    currentSessionId = null;
+                    hideSessionInfo();
+                    showSessionSummary(data.summary);
+                    showNotification('학습 세션이 종료되었습니다.', 'info');
+                    break;
+                    
+                case 'learning_analysis':
+                    updateRealTimeMetrics(data.analysis);
+                    break;
+                    
+                case 'urgent_alert':
+                    showAlert(data.alert);
+                    break;
+                    
+                case 'focus_reminder':
+                    showAlert({
+                        type: 'warning',
+                        title: '집중도 알림',
+                        message: data.message
+                    });
+                    break;
+                    
+                case 'positive_feedback':
+                    showAlert({
+                        type: 'success',
+                        title: '긍정적 피드백',
+                        message: data.message
+                    });
+                    break;
+                    
+                case 'error':
+                    showNotification(data.message, 'error');
+                    break;
+                    
+                default:
+                    console.log('알 수 없는 메시지 타입:', data.type);
+            }
+        }
+        
+        // 실시간 메트릭 업데이트
+        function updateRealTimeMetrics(analysis) {
+            // 집중도
+            const focusLevel = Math.round(analysis.current_focus_level);
+            document.getElementById('focusScore').textContent = `${focusLevel}%`;
+            document.getElementById('focusProgress').style.width = `${focusLevel}%`;
+            
+            // 학습 속도
+            const velocity = analysis.learning_velocity.toFixed(1);
+            document.getElementById('learningVelocity').textContent = `${velocity} 단위/시간`;
+            
+            // 효율성 점수
+            const efficiency = Math.round(analysis.efficiency_score);
+            document.getElementById('efficiencyScore').textContent = `${efficiency}%`;
+            document.getElementById('efficiencyProgress').style.width = `${efficiency}%`;
+            
+            // 권장사항 업데이트
+            updateRecommendations(analysis.recommendations);
+            
+            // 알림 처리
+            if (analysis.alerts && analysis.alerts.length > 0) {
+                analysis.alerts.forEach(alert => showAlert(alert));
+            }
+            
+            // 차트 데이터 추가
+            addChartData(focusLevel, efficiency);
+        }
+        
+        // 권장사항 업데이트
+        function updateRecommendations(recommendations) {
+            const container = document.getElementById('recommendations');
+            
+            if (!recommendations || recommendations.length === 0) {
+                container.innerHTML = '<div class="loading">권장사항을 분석 중입니다...</div>';
+                return;
+            }
+            
+            container.innerHTML = recommendations.map(rec => 
+                `<div class="recommendation-item">💡 ${rec}</div>`
+            ).join('');
+        }
+        
+        // 알림 표시
+        function showAlert(alert) {
+            const alertsContainer = document.getElementById('alerts');
+            const alertClass = `alert-${alert.type || 'info'}`;
+            
+            const alertElement = document.createElement('div');
+            alertElement.className = `alert ${alertClass}`;
+            alertElement.innerHTML = `
+                <strong>${alert.title || '알림'}</strong><br>
+                ${alert.message}
+            `;
+            
+            // 기존 알림 제거 (최대 5개 유지)
+            while (alertsContainer.children.length >= 5) {
+                alertsContainer.removeChild(alertsContainer.firstChild);
+            }
+            
+            alertsContainer.appendChild(alertElement);
+            
+            // 3초 후 자동 제거
+            setTimeout(() => {
+                if (alertElement.parentNode) {
+                    alertElement.remove();
+                }
+            }, 10000);
+        }
+        
+        // 세션 정보 업데이트
+        function updateSessionInfo(sessionData) {
+            const sessionDiv = document.getElementById('currentSession');
+            const detailsDiv = document.getElementById('sessionDetails');
+            
+            detailsDiv.innerHTML = `
+                <p><strong>세션 ID:</strong> ${sessionData.session_id}</p>
+                <p><strong>과목:</strong> ${getSubjectName(sessionData.subject_id)}</p>
+                <p><strong>시작 시간:</strong> ${new Date().toLocaleTimeString()}</p>
+            `;
+            
+            sessionDiv.style.display = 'block';
+            
+            // 학습 시간 타이머 시작
+            startStudyTimer();
+        }
+        
+        // 세션 정보 숨기기
+        function hideSessionInfo() {
+            document.getElementById('currentSession').style.display = 'none';
+            stopStudyTimer();
+        }
+        
+        // 학습 시간 타이머
+        let studyTimerInterval = null;
+        let studyStartTime = null;
+        
+        function startStudyTimer() {
+            studyStartTime = Date.now();
+            studyTimerInterval = setInterval(updateStudyTime, 1000);
+        }
+        
+        function stopStudyTimer() {
+            if (studyTimerInterval) {
+                clearInterval(studyTimerInterval);
+                studyTimerInterval = null;
+            }
+        }
+        
+        function updateStudyTime() {
+            if (!studyStartTime) return;
+            
+            const elapsed = Date.now() - studyStartTime;
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+            
+            document.getElementById('studyTime').textContent = `${minutes}분 ${seconds}초`;
+        }
+        
+        // 차트 초기화
+        function initializeChart() {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            
+            performanceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: '집중도 (%)',
+                        data: chartData.focusData,
+                        borderColor: '#4facfe',
+                        backgroundColor: 'rgba(79, 172, 254, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: '효율성 (%)',
+                        data: chartData.efficiencyData,
+                        borderColor: '#43e97b',
+                        backgroundColor: 'rgba(67, 233, 123, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxTicksLimit: 10
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+        
+        // 차트 데이터 추가
+        function addChartData(focusLevel, efficiency) {
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString();
+            
+            chartData.labels.push(timeLabel);
+            chartData.focusData.push(focusLevel);
+            chartData.efficiencyData.push(efficiency);
+            
+            // 최대 20개 데이터 포인트 유지
+            if (chartData.labels.length > 20) {
+                chartData.labels.shift();
+                chartData.focusData.shift();
+                chartData.efficiencyData.shift();
+            }
+            
+            performanceChart.update('none');
+        }
+        
+        // 연결 상태 업데이트
+        function updateConnectionStatus(connected) {
+            isConnected = connected;
+            const indicator = document.getElementById('connectionStatus');
+            
+            if (connected) {
+                indicator.classList.remove('disconnected');
+            } else {
+                indicator.classList.add('disconnected');
+            }
+        }
+        
+        // 연결 상태 확인
+        function checkConnection() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                // 핑 전송
+                websocket.send(JSON.stringify({ type: 'ping' }));
+            }
+        }
+        
+        // 알림 표시 (우상단)
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notificationContainer');
+            
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.textContent = message;
+            
+            container.appendChild(notification);
+            
+            // 애니메이션으로 표시
+            setTimeout(() => notification.classList.add('show'), 100);
+            
+            // 3초 후 제거
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+        
+        // 학습 세션 시작
+        function startSession() {
+            if (!isConnected) {
+                showNotification('WebSocket 연결이 필요합니다.', 'error');
+                return;
+            }
+            
+            const subjectId = document.getElementById('subjectSelect').value;
+            
+            const message = {
+                type: 'start_session',
+                subject_id: subjectId ? parseInt(subjectId) : null
+            };
+            
+            websocket.send(JSON.stringify(message));
+        }
+        
+        // 세션 종료
+        function endSession() {
+            if (!currentSessionId) {
+                showNotification('활성 세션이 없습니다.', 'warning');
+                return;
+            }
+            
+            const message = {
+                type: 'end_session',
+                session_id: currentSessionId
+            };
+            
+            websocket.send(JSON.stringify(message));
+        }
+        
+        // 데이터 새로고침
+        function refreshData() {
+            if (!currentSessionId) {
+                showNotification('활성 세션이 없습니다.', 'warning');
+                return;
+            }
+            
+            const message = {
+                type: 'get_status',
+                session_id: currentSessionId
+            };
+            
+            websocket.send(JSON.stringify(message));
+            showNotification('데이터를 새로고침했습니다.', 'success');
+        }
+        
+        // 과목명 조회
+        function getSubjectName(subjectId) {
+            const subjects = {
+                1: '수학',
+                2: '영어',
+                3: '과학',
+                4: '역사'
+            };
+            
+            return subjects[subjectId] || '선택안함';
+        }
+        
+        // 세션 요약 표시
+        function showSessionSummary(summary) {
+            const duration = Math.floor(summary.duration / 60);
+            const focusScore = Math.round(summary.focus_score);
+            const productivityScore = Math.round(summary.productivity_score);
+            
+            const summaryHtml = `
+                <div class="alert alert-info">
+                    <strong>📊 학습 세션 요약</strong><br>
+                    • 학습 시간: ${duration}분<br>
+                    • 집중도: ${focusScore}%<br>
+                    • 생산성: ${productivityScore}%<br>
+                    • 총 이벤트: ${summary.total_events}개
+                </div>
+            `;
+            
+            document.getElementById('alerts').insertAdjacentHTML('afterbegin', summaryHtml);
+        }
+        
+        // 테스트 이벤트 시뮬레이션 (개발용)
+        function simulateTestEvents() {
+            if (!currentSessionId) return;
+            
+            const events = [
+                { type: 'content_read', metadata: { duration: 5.2 } },
+                { type: 'problem_solved', metadata: { difficulty: 'medium' } },
+                { type: 'note_taken', metadata: { length: 150 } },
+                { type: 'idle', metadata: { duration: 2.0 } }
+            ];
+            
+            let eventIndex = 0;
+            const interval = setInterval(() => {
+                if (!currentSessionId || eventIndex >= events.length) {
+                    clearInterval(interval);
+                    return;
+                }
+                
+                const event = events[eventIndex];
+                websocket.send(JSON.stringify({
+                    type: 'track_event',
+                    event_type: event.type,
+                    metadata: event.metadata
+                }));
+                
+                eventIndex++;
+            }, 3000);
+        }
+        
+        // 키보드 단축키
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey || event.metaKey) {
+                switch (event.key) {
+                    case 's':
+                        event.preventDefault();
+                        startSession();
+                        break;
+                    case 'e':
+                        event.preventDefault();
+                        endSession();
+                        break;
+                    case 'r':
+                        event.preventDefault();
+                        refreshData();
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

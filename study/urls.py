@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from .realtime_views import RealTimeLearningViewSet, StreamingStatusViewSet
 
 # Create router and register viewsets
 router = DefaultRouter()
@@ -10,10 +11,18 @@ router.register(r'summaries', views.StudySummaryViewSet, basename='studysummary'
 router.register(r'progress', views.StudyProgressViewSet, basename='studyprogress')
 router.register(r'goals', views.StudyGoalViewSet, basename='studygoal')
 
+# 실시간 분석 라우터
+realtime_router = DefaultRouter()
+realtime_router.register(r'realtime/learning', RealTimeLearningViewSet, basename='realtime-learning')
+realtime_router.register(r'realtime/streaming', StreamingStatusViewSet, basename='realtime-streaming')
+
 # URL patterns
 urlpatterns = [
     # Router URLs
     path('', include(router.urls)),
+    
+    # 실시간 분석 URLs
+    path('', include(realtime_router.urls)),
     
     # Custom API endpoints
     path('generate-summary/', views.GenerateSummaryView.as_view(), name='generate-summary'),
