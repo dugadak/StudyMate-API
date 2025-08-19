@@ -76,6 +76,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'studymate_api.middleware.tracing_middleware.DistributedTracingMiddleware',
+    'studymate_api.middleware.zero_trust_middleware.ThreatDetectionMiddleware',
     'studymate_api.middleware.SecurityMiddleware',
     'studymate_api.middleware.RequestLoggingMiddleware',
     'studymate_api.middleware.PerformanceMonitoringMiddleware',
@@ -86,6 +87,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'studymate_api.middleware.zero_trust_middleware.ZeroTrustSecurityMiddleware',
     'studymate_api.middleware.tracing_middleware.UserContextMiddleware',
     'studymate_api.middleware.tracing_middleware.BusinessContextMiddleware',
     'allauth.account.middleware.AccountMiddleware',
@@ -367,6 +369,35 @@ DISTRIBUTED_TRACING = {
     'TRACE_SAMPLE_RATE': config('OTEL_TRACE_SAMPLE_RATE', default=0.1, cast=float),
     'AUTO_INSTRUMENT': config('OTEL_AUTO_INSTRUMENT', default=True, cast=bool),
     'CONSOLE_EXPORTER': config('OTEL_CONSOLE_EXPORTER', default=DEBUG, cast=bool),
+}
+
+# Zero Trust 보안 설정
+ZERO_TRUST_ENABLED = config('ZERO_TRUST_ENABLED', default=True, cast=bool)
+
+# GeoIP 데이터베이스 경로
+GEOIP_DB_PATH = config('GEOIP_DB_PATH', default='')
+
+# Zero Trust 보안 정책
+ZERO_TRUST_POLICY = {
+    'TRUST_SCORE_THRESHOLD': config('ZT_TRUST_THRESHOLD', default=0.6, cast=float),
+    'MFA_REQUIRED_THRESHOLD': config('ZT_MFA_THRESHOLD', default=0.5, cast=float),
+    'ADMIN_REQUIRED_THRESHOLD': config('ZT_ADMIN_THRESHOLD', default=0.3, cast=float),
+    'DEVICE_TRUST_DURATION': config('ZT_DEVICE_TRUST_DAYS', default=30, cast=int) * 86400,
+    'LOCATION_TRUST_DURATION': config('ZT_LOCATION_TRUST_DAYS', default=7, cast=int) * 86400,
+    'MAX_FAILED_ATTEMPTS': config('ZT_MAX_FAILED_ATTEMPTS', default=5, cast=int),
+    'SESSION_TIMEOUT': config('ZT_SESSION_TIMEOUT', default=3600, cast=int),
+    'QUARANTINE_DURATION': config('ZT_QUARANTINE_HOURS', default=24, cast=int) * 3600,
+}
+
+# 위협 탐지 설정
+THREAT_DETECTION = {
+    'RATE_LIMIT_PER_MINUTE': config('THREAT_RATE_LIMIT', default=60, cast=int),
+    'BRUTE_FORCE_THRESHOLD': config('THREAT_BRUTE_FORCE', default=10, cast=int),
+    'ENUMERATION_THRESHOLD': config('THREAT_ENUMERATION', default=20, cast=int),
+    'DDOS_THRESHOLD': config('THREAT_DDOS', default=100, cast=int),
+    'ENABLE_GEO_BLOCKING': config('THREAT_GEO_BLOCKING', default=False, cast=bool),
+    'BLOCKED_COUNTRIES': config('THREAT_BLOCKED_COUNTRIES', default='', 
+                               cast=lambda v: [c.strip() for c in v.split(',') if c.strip()]),
 }
 
 CELERY_TASK_ROUTES = {

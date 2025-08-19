@@ -7,6 +7,10 @@ from rest_framework_simplejwt.views import (
 )
 
 from . import views
+from .zero_trust_views import (
+    DeviceRegistrationView, MFAChallengeView, 
+    LocationVerificationView, SecurityStatusView
+)
 
 app_name = 'accounts'
 
@@ -40,4 +44,10 @@ urlpatterns = [
     # path('2fa/enable/', views.Enable2FAView.as_view(), name='enable-2fa'),
     # path('2fa/disable/', views.Disable2FAView.as_view(), name='disable-2fa'),
     # path('2fa/verify/', views.Verify2FAView.as_view(), name='verify-2fa'),
+    
+    # Zero Trust Security
+    path('zero-trust/devices/', DeviceRegistrationView.as_view(), name='zero-trust-devices'),
+    path('zero-trust/mfa/', MFAChallengeView.as_view(), name='zero-trust-mfa'),
+    path('zero-trust/location/', LocationVerificationView.as_view(), name='zero-trust-location'),
+    path('zero-trust/status/', SecurityStatusView.as_view(), name='zero-trust-status'),
 ]

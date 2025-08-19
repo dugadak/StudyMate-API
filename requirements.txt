@@ -74,6 +74,11 @@ opentelemetry-instrumentation-redis==0.42b0
 opentelemetry-instrumentation-requests==0.42b0
 opentelemetry-instrumentation-logging==0.42b0
 
+# Zero Trust 보안
+geoip2==4.7.0
+pyjwt==2.8.0
+pyotp==2.9.0
+
 # 개발 도구
 black==23.12.1
 flake8==7.0.0
