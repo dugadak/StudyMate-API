@@ -19,6 +19,9 @@ from .models import StudySummary, Subject, StudySettings, StudyProgress
 from studymate_api.metrics import (
     track_ai_event, track_system_event, EventType
 )
+from .tracing_decorators import (
+    trace_study_operation, trace_ai_generation, trace_database_operation, trace_cache_access
+)
 
 User = get_user_model()
 logger = logging.getLogger('study.services')
@@ -76,6 +79,7 @@ class StudySummaryService:
                 api_key=anthropic_config['api_key']
             )
     
+    @trace_study_operation("summary_generation", include_user=True, include_subject=True)
     def generate_summary(self, user: User, subject_id: int, 
                         custom_prompt: Optional[str] = None) -> StudySummary:
         """
@@ -193,6 +197,7 @@ class StudySummaryService:
             difficulty_level=cached_data['difficulty_level']
         )
     
+    @trace_ai_generation("multi_provider")
     def _generate_content_with_fallback(self, study_settings: StudySettings, 
                                       custom_prompt: Optional[str] = None) -> str:
         """Generate content with multiple AI providers as fallback"""
@@ -260,6 +265,7 @@ class StudySummaryService:
         max_tries=3,
         max_time=300
     )
+    @trace_ai_generation("openai", "gpt-3.5-turbo")
     def _generate_with_openai(self, study_settings: StudySettings,
                             custom_prompt: Optional[str] = None) -> str:
         """Generate content using OpenAI GPT"""

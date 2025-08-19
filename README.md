@@ -2,7 +2,7 @@
 
 > StudyMate 서비스의 백엔드 API 서버
 
-AI 기반 개인화 학습 플랫폼 StudyMate의 서버 사이드 애플리케이션입니다. Django REST Framework를 기반으로 구축되었으며, OpenAI GPT를 활용한 개인화 학습 콘텐츠 생성 및 Stripe 결제 시스템을 제공합니다.
+AI 기반 개인화 학습 플랫폼 StudyMate의 서버 사이드 애플리케이션입니다. Django REST Framework를 기반으로 구축되었으며, 실시간 학습 분석, CQRS 패턴, OpenAI GPT를 활용한 개인화 학습 콘텐츠 생성 및 Stripe 결제 시스템을 제공합니다.
 
 ## 🏗️ 서버 아키텍처
 
@@ -40,27 +40,41 @@ AI 기반 개인화 학습 플랫폼 StudyMate의 서버 사이드 애플리케�
 
 ### 주요 서버 컴포넌트
 
-- 🔐 **인증 시스템**: Django Token Authentication
+- 🔐 **인증 시스템**: JWT 기반 인증 및 권한 관리
 - 📚 **학습 관리**: 개인화 설정 및 진도 추적
-- 🤖 **AI 엔진**: OpenAI GPT 통합 서비스
+- ⚡ **실시간 분석**: WebSocket 기반 학습 패턴 분석 ✨ **최신!**
+- 🏗️ **CQRS 아키텍처**: 명령/조회 분리 패턴 ✨ **최신!**
+- 📊 **스트리밍 처리**: 대용량 실시간 데이터 처리 ✨ **최신!**
+- 🎯 **개인화 엔진**: AI 기반 학습 스타일 분석 및 추천
+- 🤖 **AI 엔진**: 다중 AI 제공자 통합 서비스
 - 📝 **퀴즈 엔진**: 문제 생성 및 채점 시스템
 - 🔔 **알림 서버**: Celery 기반 스케줄링
 - 💳 **결제 처리**: Stripe 웹훅 및 구독 관리
+- 🚀 **고급 캐싱**: 태그 기반 캐시 무효화 시스템
 
 ## 🛠️ 기술 스택
 
 ### **Backend Framework**
 - **Django 5.2**: 웹 프레임워크
 - **Django REST Framework 3.16**: REST API 개발
+- **Django Channels 4.0**: WebSocket 지원 ✨ **최신!**
 - **Python 3.10+**: 프로그래밍 언어
 
 ### **Database & Cache**
 - **PostgreSQL**: 프로덕션 데이터베이스
 - **SQLite**: 개발환경 데이터베이스
-- **Redis**: 캐싱 및 세션 스토어
+- **Redis**: 캐싱, 세션 스토어, 채널 레이어 ✨ **업그레이드!**
+
+### **Real-time & Architecture** ✨ **최신 추가!**
+- **WebSocket**: 실시간 양방향 통신
+- **CQRS Pattern**: 명령/조회 분리 아키텍처
+- **Event Sourcing**: 이벤트 기반 데이터 저장
+- **Streaming Processing**: 대용량 실시간 데이터 처리
 
 ### **External Services**
 - **OpenAI GPT-3.5/4**: AI 콘텐츠 생성
+- **Anthropic Claude**: AI 모델 통합 ✨ **최신!**
+- **Together AI**: 추가 AI 제공자 ✨ **최신!**
 - **Stripe**: 결제 처리 및 구독 관리
 - **Firebase**: 푸시 알림 (예정)
 
@@ -120,8 +134,17 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-7. **서버 실행**
+7. **실시간 분석 시스템 시작** ✨ **최신!**
 ```bash
+python manage.py realtime_analytics_management --start-streaming
+```
+
+8. **서버 실행**
+```bash
+# HTTP/WebSocket 동시 지원 (ASGI 서버 사용)
+daphne studymate_api.asgi:application --port 8000
+
+# 또는 개발용 서버 (HTTP만 지원)
 python manage.py runserver
 ```
 
@@ -143,6 +166,11 @@ STRIPE_SECRET_KEY=sk_test_...
 
 # Redis
 REDIS_URL=redis://localhost:6379/0
+
+# 실시간 분석 설정 (선택사항) ✨ 최신!
+REALTIME_ANALYSIS_INTERVAL=30
+REALTIME_FOCUS_WINDOW=300
+REALTIME_MAX_SESSIONS=1000
 ```
 
 ## 📚 API 문서
@@ -152,6 +180,7 @@ REDIS_URL=redis://localhost:6379/0
 - **Swagger UI**: http://localhost:8000/api/docs/
 - **ReDoc**: http://localhost:8000/api/redoc/
 - **Schema**: http://localhost:8000/api/schema/
+- **실시간 대시보드**: http://localhost:8000/templates/realtime_dashboard.html ✨ **최신!**
 
 ## 🛣️ API 엔드포인트
 
@@ -181,6 +210,25 @@ REDIS_URL=redis://localhost:6379/0
 ### 알림 (Notifications)
 - `GET /api/notifications/` - 알림 목록
 - `POST /api/notifications/device-token/` - 디바이스 토큰 등록
+
+### 실시간 학습 분석 ✨ **최신!**
+- `POST /api/study/realtime/learning/start_session/` - 학습 세션 시작
+- `POST /api/study/realtime/learning/end_session/` - 세션 종료
+- `GET /api/study/realtime/learning/session_status/` - 세션 상태 조회
+- `GET /api/study/realtime/learning/active_sessions/` - 활성 세션 목록
+- `GET /api/study/realtime/learning/dashboard/` - 실시간 대시보드 데이터
+
+### CQRS 패턴 API ✨ **최신!**
+- `POST /api/cqrs/subjects/` - 명령: 과목 생성
+- `GET /api/cqrs/subjects/` - 조회: 과목 목록
+- `POST /api/cqrs/subjects/{id}/generate_summary/` - AI 요약 생성
+- `GET /api/cqrs/study-summaries/` - 요약 목록 조회
+- `GET /api/cqrs/study-progress/` - 진도 조회
+
+### WebSocket 엔드포인트 ✨ **최신!**
+- `ws://localhost:8000/ws/learning/analytics/` - 실시간 학습 분석
+- `ws://localhost:8000/ws/study/room/{room_id}/` - 그룹 스터디룸
+- `ws://localhost:8000/ws/system/monitoring/` - 시스템 모니터링 (관리자용)
 
 ## 📁 프로젝트 구조
 

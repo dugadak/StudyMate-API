@@ -75,6 +75,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'studymate_api.middleware.tracing_middleware.DistributedTracingMiddleware',
     'studymate_api.middleware.SecurityMiddleware',
     'studymate_api.middleware.RequestLoggingMiddleware',
     'studymate_api.middleware.PerformanceMonitoringMiddleware',
@@ -85,6 +86,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'studymate_api.middleware.tracing_middleware.UserContextMiddleware',
+    'studymate_api.middleware.tracing_middleware.BusinessContextMiddleware',
     'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -336,6 +339,34 @@ STREAMING_CONFIG = {
     'MAX_PROCESSING_QUEUES': config('STREAMING_MAX_QUEUES', default=50, cast=int),
     'METRICS_UPDATE_INTERVAL': config('STREAMING_METRICS_INTERVAL', default=10, cast=int),
     'AUTO_START': config('STREAMING_AUTO_START', default=True, cast=bool),
+}
+
+# OpenTelemetry 분산 추적 설정
+OTEL_ENABLED = config('OTEL_ENABLED', default=True, cast=bool)
+OTEL_SERVICE_NAME = config('OTEL_SERVICE_NAME', default='studymate-api')
+OTEL_SERVICE_VERSION = config('OTEL_SERVICE_VERSION', default='1.0.0')
+
+# Jaeger 설정
+JAEGER_ENDPOINT = config('JAEGER_ENDPOINT', default='')
+JAEGER_AGENT_HOST = config('JAEGER_AGENT_HOST', default='localhost')
+JAEGER_AGENT_PORT = config('JAEGER_AGENT_PORT', default=14268, cast=int)
+
+# OTLP Exporter 설정 (Observability 플랫폼용)
+OTEL_EXPORTER_OTLP_ENDPOINT = config('OTEL_EXPORTER_OTLP_ENDPOINT', default='')
+OTEL_EXPORTER_OTLP_HEADERS = config('OTEL_EXPORTER_OTLP_HEADERS', default='', 
+                                   cast=lambda v: dict([h.split('=') for h in v.split(',') if '=' in h]) if v else {})
+
+# 분산 추적 설정
+DISTRIBUTED_TRACING = {
+    'ENABLED': OTEL_ENABLED,
+    'SERVICE_NAME': OTEL_SERVICE_NAME,
+    'SERVICE_VERSION': OTEL_SERVICE_VERSION,
+    'JAEGER_ENDPOINT': JAEGER_ENDPOINT,
+    'OTLP_ENDPOINT': OTEL_EXPORTER_OTLP_ENDPOINT,
+    'OTLP_HEADERS': OTEL_EXPORTER_OTLP_HEADERS,
+    'TRACE_SAMPLE_RATE': config('OTEL_TRACE_SAMPLE_RATE', default=0.1, cast=float),
+    'AUTO_INSTRUMENT': config('OTEL_AUTO_INSTRUMENT', default=True, cast=bool),
+    'CONSOLE_EXPORTER': config('OTEL_CONSOLE_EXPORTER', default=DEBUG, cast=bool),
 }
 
 CELERY_TASK_ROUTES = {

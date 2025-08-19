@@ -63,6 +63,17 @@ channels==4.0.0
 channels-redis==4.2.0
 daphne==4.1.0
 
+# OpenTelemetry 분산 추적
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-exporter-jaeger-thrift==1.21.0
+opentelemetry-exporter-otlp-proto-grpc==1.21.0
+opentelemetry-instrumentation-django==0.42b0
+opentelemetry-instrumentation-psycopg2==0.42b0
+opentelemetry-instrumentation-redis==0.42b0
+opentelemetry-instrumentation-requests==0.42b0
+opentelemetry-instrumentation-logging==0.42b0
+
 # 개발 도구
 black==23.12.1
 flake8==7.0.0
