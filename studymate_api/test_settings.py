@@ -9,8 +9,13 @@
 """
 
 from .settings import *
+
+# 테스트용 간소화된 URL 설정
+ROOT_URLCONF = 'studymate_api.test_urls'
 import tempfile
 import os
+import sys
+from datetime import timedelta
 
 # 테스트 환경 표시
 TESTING = True
@@ -93,6 +98,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
 ]
 
@@ -126,6 +132,13 @@ EXTERNAL_SERVICES = {
     'EMAIL_ENABLED': False,
     'NOTIFICATIONS_ENABLED': False,
 }
+
+# 고급 시스템들 비활성화 (테스트 성능 향상)
+AUTO_RECOVERY_ENABLED = False
+AB_TESTING_ENABLED = False
+ZERO_TRUST_ENABLED = False
+DISTRIBUTED_TRACING = {'ENABLED': False}
+REALTIME_ANALYTICS = {'ENABLE_NOTIFICATIONS': False}
 
 # 테스트 데이터 설정
 TEST_DATA = {

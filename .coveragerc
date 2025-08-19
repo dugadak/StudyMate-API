@@ -1,8 +1,8 @@
 [run]
 source = .
-omit = 
+omit =
     */venv/*
-    */virtualenv/*
+    */env/*
     */migrations/*
     */tests/*
     */test_*
@@ -10,24 +10,24 @@ omit =
     */settings/*
     */wsgi.py
     */asgi.py
-    */conftest.py
     */__pycache__/*
-    */node_modules/*
-    */static/*
-    */media/*
-    */locale/*
-    */fixtures/*
+    .venv/*
+    venv/*
+    env/*
+    build/*
+    dist/*
+    *.egg-info/*
+    .pytest_cache/*
+    .mypy_cache/*
+    node_modules/*
 
-branch = True
-parallel = True
-concurrency = multiprocessing,thread
+branch = true
+parallel = true
 
 [report]
 precision = 2
-show_missing = True
-skip_covered = False
-sort = Cover
-
+show_missing = true
+skip_covered = false
 exclude_lines =
     pragma: no cover
     def __repr__
@@ -42,10 +42,6 @@ exclude_lines =
 [html]
 directory = test_results/coverage_html
 title = StudyMate API 테스트 커버리지 리포트
-show_contexts = True
 
 [xml]
 output = test_results/coverage.xml
-
-[json]
-output = test_results/coverage.json

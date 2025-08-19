@@ -110,8 +110,7 @@ COMMON_PARAMETERS = {
         type=OpenApiTypes.INT,
         location=OpenApiParameter.QUERY,
         description='페이지 번호 (1부터 시작)',
-        required=False,
-        example=1
+        required=False
     ),
     'page_size': OpenApiParameter(
         name='page_size',
@@ -119,7 +118,6 @@ COMMON_PARAMETERS = {
         location=OpenApiParameter.QUERY,
         description='페이지당 항목 수 (최대 100)',
         required=False,
-        example=20
     ),
     'search': OpenApiParameter(
         name='search',
@@ -127,7 +125,6 @@ COMMON_PARAMETERS = {
         location=OpenApiParameter.QUERY,
         description='검색 키워드',
         required=False,
-        example='파이썬'
     ),
     'ordering': OpenApiParameter(
         name='ordering',
@@ -135,7 +132,6 @@ COMMON_PARAMETERS = {
         location=OpenApiParameter.QUERY,
         description='정렬 기준 (-를 붙이면 내림차순)',
         required=False,
-        example='-created_at'
     ),
     'fields': OpenApiParameter(
         name='fields',
@@ -143,7 +139,6 @@ COMMON_PARAMETERS = {
         location=OpenApiParameter.QUERY,
         description='반환할 필드 목록 (쉼표로 구분)',
         required=False,
-        example='id,name,description'
     )
 }
 

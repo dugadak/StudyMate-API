@@ -21,7 +21,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 from .metrics import track_user_event, EventType, MetricEvent, MetricType
-from .personalization import PersonalizationEngine
+from .personalization import ContentRecommendationEngine
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -106,7 +106,7 @@ class RealTimeLearningAnalyzer:
     
     def __init__(self):
         self.channel_layer = get_channel_layer()
-        self.personalization_engine = PersonalizationEngine()
+        self.personalization_engine = ContentRecommendationEngine()
         
         # 분석 설정
         self.analysis_interval = 30  # 30초마다 분석

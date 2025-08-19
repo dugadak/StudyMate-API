@@ -163,11 +163,16 @@ class SensitiveDataFilter(logging.Filter):
             return data
 
 
-def get_logging_config() -> Dict[str, Any]:
+def get_logging_config(base_dir: str = None) -> Dict[str, Any]:
     """Get comprehensive logging configuration"""
     
+    # Use passed base_dir or default fallback
+    if base_dir is None:
+        from pathlib import Path
+        base_dir = Path(__file__).resolve().parent.parent
+    
     # Create logs directory if it doesn't exist
-    log_dir = os.path.join(settings.BASE_DIR, 'logs')
+    log_dir = os.path.join(base_dir, 'logs')
     os.makedirs(log_dir, exist_ok=True)
     
     config = {

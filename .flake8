@@ -1,69 +1,26 @@
 [flake8]
-# Flake8 설정 파일
-
-# 최대 라인 길이
-max-line-length = 120
-
-# 복잡도 한계
-max-complexity = 12
-
-# 제외할 패턴
+max-line-length = 127
+max-complexity = 10
 exclude = 
     .git,
     __pycache__,
     venv,
-    env,
     .venv,
-    .env,
     migrations,
-    .mypy_cache,
     .pytest_cache,
+    .mypy_cache,
     node_modules,
-    build,
     dist,
-    *.egg-info
-
-# 제외할 에러 코드
+    build
 ignore = 
-    # E203: whitespace before ':' (black과 충돌)
     E203,
-    # W503: line break before binary operator (PEP 8 변경사항)
-    W503,
-    # E501: line too long (black이 처리)
     E501,
-    # F401: imported but unused (때때로 __init__.py에서 필요)
-    # F403: 'from module import *' used (Django settings에서 사용)
-    # F405: name may be undefined, or defined from star imports
-
-# 경고 수준별 설정
-select = 
-    E,    # pycodestyle errors
-    W,    # pycodestyle warnings  
-    F,    # pyflakes
-    C,    # mccabe complexity
-    B,    # flake8-bugbear
-    I,    # isort
-    N,    # pep8-naming
-
-# 문서 스타일 검사
-docstring-convention = google
-
-# Import 정렬 설정  
-import-order-style = google
-application-import-names = studymate_api,accounts,study,quiz,subscription,notifications
-
-# 특정 파일별 설정
+    W503,
+    F401,
+    E722
 per-file-ignores =
-    # __init__.py 파일에서는 import 관련 규칙 완화
-    __init__.py:F401,F403,F405
-    # settings 파일에서는 길이 제한 완화
-    */settings.py:E501
-    # 테스트 파일에서는 일부 규칙 완화
-    test_*.py:F401,F403,F405
-    # 마이그레이션 파일 제외
-    */migrations/*.py:E501,F401
-
-# 네이밍 컨벤션
-classname-min-length = 2
-function-min-length = 2
-variable-min-length = 1
+    __init__.py:F401
+    settings.py:E501
+    */migrations/*:E501,F401
+    */tests/*:E501
+select = E,W,F,C

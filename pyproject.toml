@@ -11,7 +11,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "Django>=5.0",
     "djangorestframework>=3.14",
@@ -20,7 +20,7 @@ dependencies = [
 [tool.black]
 # Black 코드 포매터 설정
 line-length = 120
-target-version = ['py311', 'py312']
+target-version = ['py310', 'py311']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -114,7 +114,7 @@ title = "StudyMate API 테스트 커버리지 리포트"
 
 [tool.ruff]
 # Ruff 린터 설정 (flake8 대체)
-target-version = "py311"
+target-version = "py310"
 line-length = 120
 select = [
     "E",   # pycodestyle errors
@@ -188,7 +188,7 @@ max-attributes = 15
 
 [tool.mypy]
 # MyPy 타입 검사 설정 (mypy.ini와 동기화)
-python_version = "3.11"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
