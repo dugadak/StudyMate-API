@@ -1,0 +1,75 @@
+# Example Terraform Variables Configuration
+# Copy this file to terraform.tfvars and fill in your actual values
+
+# General Configuration
+project_name = "timetree-creator"
+environment  = "dev"  # dev, staging, or production
+aws_region   = "ap-northeast-2"
+
+# Domain Configuration (optional)
+# domain_name = "your-domain.com"
+
+# Container Configuration
+container_port   = 8000
+container_cpu    = 512
+container_memory = 1024
+desired_count    = 2
+
+# Database Configuration
+database_name     = "timetree_creator"
+database_username = "app_user"
+db_instance_class = "db.t3.micro"  # Use db.r5.large for production
+
+# Redis Configuration
+redis_node_type    = "cache.t3.micro"  # Use cache.r5.large for production
+redis_num_clusters = 2
+
+# API Keys and Secrets (REQUIRED)
+# Get these from your respective service providers
+
+# OpenAI API Key (from https://platform.openai.com/)
+openai_api_key = "sk-your-openai-api-key-here"
+
+# Anthropic API Key (from https://console.anthropic.com/)
+anthropic_api_key = "your-anthropic-api-key-here"
+
+# Together AI API Key (from https://api.together.xyz/)
+together_api_key = "your-together-api-key-here"
+
+# TimeTree OAuth Credentials (from TimeTree Developer Portal)
+timetree_client_id     = "your-timetree-client-id"
+timetree_client_secret = "your-timetree-client-secret"
+
+# Stripe API Keys (from https://dashboard.stripe.com/apikeys)
+stripe_publishable_key = "pk_test_your-stripe-publishable-key"
+stripe_secret_key      = "sk_test_your-stripe-secret-key"
+
+# JWT Secret (generate a random 32+ character string)
+jwt_secret_key = "your-super-secret-jwt-key-minimum-32-characters-long"
+
+# Optional Features
+enable_monitoring = true
+enable_auto_scaling = true
+enable_database_encryption = true
+
+# Development Settings (set to false for production)
+enable_debug_mode = true
+enable_ssh_access = false
+
+# Auto Scaling Configuration
+min_capacity = 1
+max_capacity = 10
+cpu_target_value = 70.0
+memory_target_value = 80.0
+
+# Backup Configuration
+db_backup_retention_period = 7
+backup_window = "03:00-04:00"
+maintenance_window = "sun:04:00-sun:05:00"
+
+# Logging Configuration
+log_retention_days = 30
+
+# Security Configuration
+allowed_cidr_blocks = ["0.0.0.0/0"]  # Restrict this for production
+enable_waf = false  # Set to true for production

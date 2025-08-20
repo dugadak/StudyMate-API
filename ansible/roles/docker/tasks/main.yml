@@ -1,0 +1,100 @@
+---
+# Docker 설치 및 설정
+
+- name: Docker 의존 패키지 설치
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+    state: present
+    update_cache: yes
+
+- name: Docker GPG 키 추가
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Docker 리포지토리 추가
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Docker 패키지 설치
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+
+- name: Docker 서비스 시작 및 활성화
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: 사용자를 docker 그룹에 추가
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Docker Compose 설치 (standalone)
+  get_url:
+    url: "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64"
+    dest: /usr/local/bin/docker-compose
+    mode: '0755'
+
+- name: Docker 데몬 설정
+  copy:
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "100m",
+          "max-file": "3"
+        },
+        "storage-driver": "overlay2",
+        "exec-opts": ["native.cgroupdriver=systemd"],
+        "live-restore": true,
+        "userland-proxy": false,
+        "experimental": false,
+        "metrics-addr": "127.0.0.1:9323",
+        "default-address-pools": [
+          {
+            "base": "172.80.0.0/12",
+            "size": 24
+          }
+        ]
+      }
+    dest: /etc/docker/daemon.json
+    backup: yes
+  notify: restart docker
+
+- name: Docker 로그로테이션 설정
+  copy:
+    content: |
+      /var/lib/docker/containers/*/*.log {
+        rotate 3
+        daily
+        compress
+        size=1M
+        missingok
+        delaycompress
+        copytruncate
+      }
+    dest: /etc/logrotate.d/docker
+
+- name: Docker 시스템 정리 크론 작업
+  cron:
+    name: "Docker 시스템 정리"
+    minute: "0"
+    hour: "2"
+    job: "docker system prune -af --volumes > /dev/null 2>&1"
+    user: root

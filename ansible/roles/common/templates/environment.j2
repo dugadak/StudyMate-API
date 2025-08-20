@@ -1,0 +1,37 @@
+# {{ ansible_managed }}
+# 환경변수 설정파일
+
+# 기본 설정
+ENVIRONMENT={{ environment }}
+PROJECT_NAME={{ project_name }}
+DEBUG={{ 'true' if environment == 'dev' else 'false' }}
+
+# 웹 서버 설정
+ALLOWED_HOSTS={% for host in groups['web_servers'] %}{{ hostvars[host]['ansible_host'] }}{% if not loop.last %},{% endif %}{% endfor %}{% if load_balancer_domain is defined %},{{ load_balancer_domain }}{% endif %}
+
+# 데이터베이스 설정
+DATABASE_URL=postgresql://{{ db_user }}:{{ db_password }}@{{ hostvars[groups['database_servers'][0]]['ansible_host'] }}:5432/{{ db_name }}
+
+# Redis 설정
+REDIS_URL=redis://{{ hostvars[groups['cache_servers'][0]]['ansible_host'] }}:6379/0
+
+# API 키들 (실제 배포시 vault로 암호화 필요)
+OPENAI_API_KEY={{ openai_api_key | default('your-openai-key-here') }}
+TIMETREE_CLIENT_ID={{ timetree_client_id | default('your-timetree-client-id') }}
+TIMETREE_CLIENT_SECRET={{ timetree_client_secret | default('your-timetree-secret') }}
+STRIPE_PUBLISHABLE_KEY={{ stripe_publishable_key | default('pk_test_your-stripe-key') }}
+STRIPE_SECRET_KEY={{ stripe_secret_key | default('sk_test_your-stripe-secret') }}
+
+# JWT 설정
+JWT_SECRET_KEY={{ jwt_secret_key | default('your-jwt-secret-key') }}
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# 로깅 설정
+LOG_LEVEL={{ 'DEBUG' if environment == 'dev' else 'INFO' }}
+
+# 보안 설정
+SECRET_KEY={{ secret_key | default('your-django-secret-key') }}
+
+# 기타 설정
+PYTHONPATH=/opt/{{ project_name }}
+PYTHONUNBUFFERED=1

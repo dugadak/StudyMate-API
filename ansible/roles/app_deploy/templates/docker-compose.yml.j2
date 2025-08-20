@@ -1,0 +1,92 @@
+# {{ ansible_managed }}
+version: '3.8'
+
+services:
+  web:
+    image: {{ project_name }}:{{ app_version | default('latest') }}
+    container_name: {{ project_name }}-web
+    restart: unless-stopped
+    env_file:
+      - app.env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./logs/app:/app/logs
+      - ./app/backend/static:/app/static
+      - ./app/backend/media:/app/media
+    networks:
+      - app_network
+    depends_on:
+      - redis_local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  celery_worker:
+    image: {{ project_name }}:{{ app_version | default('latest') }}
+    container_name: {{ project_name }}-celery
+    restart: unless-stopped
+    env_file:
+      - app.env
+    command: ["celery", "-A", "app.main", "worker", "-l", "info"]
+    volumes:
+      - ./logs/celery:/app/logs
+    networks:
+      - app_network
+    depends_on:
+      - redis_local
+
+  celery_beat:
+    image: {{ project_name }}:{{ app_version | default('latest') }}
+    container_name: {{ project_name }}-beat
+    restart: unless-stopped
+    env_file:
+      - app.env
+    command: ["celery", "-A", "app.main", "beat", "-l", "info", "--scheduler", "django_celery_beat.schedulers:DatabaseScheduler"]
+    volumes:
+      - ./logs/celery:/app/logs
+    networks:
+      - app_network
+    depends_on:
+      - redis_local
+
+  redis_local:
+    image: redis:7-alpine
+    container_name: {{ project_name }}-redis-local
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  nginx:
+    image: nginx:alpine
+    container_name: {{ project_name }}-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/ssl/certs
+      - ./logs/nginx:/var/log/nginx
+      - ./app/backend/static:/var/www/static:ro
+      - ./app/backend/media:/var/www/media:ro
+    networks:
+      - app_network
+    depends_on:
+      - web
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local

@@ -1,0 +1,24 @@
+---
+# 공통 핸들러들
+
+- name: restart ssh
+  systemd:
+    name: ssh
+    state: restarted
+    enabled: yes
+
+- name: restart cron
+  systemd:
+    name: cron
+    state: restarted
+    enabled: yes
+
+- name: enable ufw
+  ufw:
+    state: enabled
+
+- name: restart fail2ban
+  systemd:
+    name: fail2ban
+    state: restarted
+    enabled: yes

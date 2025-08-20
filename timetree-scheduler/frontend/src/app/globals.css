@@ -1,0 +1,291 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+    
+    /* Chat specific colors */
+    --chat-user: 221.2 83.2% 53.3%;
+    --chat-assistant: 210 40% 96%;
+    --chat-system: 47.9 95.8% 53.1%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+    
+    /* Chat specific colors - dark mode */
+    --chat-user: 217.2 91.2% 59.8%;
+    --chat-assistant: 217.2 32.6% 17.5%;
+    --chat-system: 47.9 95.8% 53.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+  }
+  
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-muted rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full hover:bg-border/80;
+  }
+  
+  /* Focus styles */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+  
+  /* Selection styles */
+  ::selection {
+    @apply bg-primary/20 text-foreground;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Loading animation */
+  @keyframes loading-dots {
+    0%, 20% {
+      color: rgb(var(--foreground) / 0.4);
+      text-shadow: 0.25em 0 0 transparent,
+                   0.5em 0 0 transparent;
+    }
+    40% {
+      color: rgb(var(--foreground));
+      text-shadow: 0.25em 0 0 rgb(var(--foreground) / 0.4),
+                   0.5em 0 0 transparent;
+    }
+    60% {
+      text-shadow: 0.25em 0 0 rgb(var(--foreground)),
+                   0.5em 0 0 rgb(var(--foreground) / 0.4);
+    }
+    80%, 100% {
+      text-shadow: 0.25em 0 0 rgb(var(--foreground)),
+                   0.5em 0 0 rgb(var(--foreground));
+    }
+  }
+  
+  .loading-dots::after {
+    content: "●";
+    animation: loading-dots 1.4s infinite;
+    font-size: 0.8em;
+  }
+}
+
+@layer components {
+  /* Chat message styles */
+  .chat-message {
+    @apply max-w-none prose prose-sm dark:prose-invert;
+  }
+  
+  .chat-message h1,
+  .chat-message h2,
+  .chat-message h3,
+  .chat-message h4,
+  .chat-message h5,
+  .chat-message h6 {
+    @apply mt-6 mb-4 first:mt-0;
+  }
+  
+  .chat-message p {
+    @apply mb-4 last:mb-0;
+  }
+  
+  .chat-message ul,
+  .chat-message ol {
+    @apply mb-4 pl-6;
+  }
+  
+  .chat-message li {
+    @apply mb-2;
+  }
+  
+  .chat-message code {
+    @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
+  }
+  
+  .chat-message pre {
+    @apply bg-muted p-4 rounded-lg overflow-x-auto;
+  }
+  
+  .chat-message pre code {
+    @apply bg-transparent p-0;
+  }
+  
+  .chat-message blockquote {
+    @apply border-l-4 border-primary pl-4 italic text-muted-foreground;
+  }
+  
+  /* Animation classes */
+  .animate-message-in {
+    animation: slideInUp 0.3s ease-out forwards;
+  }
+  
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  /* Custom button variants */
+  .btn-ghost {
+    @apply bg-transparent hover:bg-accent hover:text-accent-foreground;
+  }
+  
+  .btn-outline-primary {
+    @apply border border-primary text-primary hover:bg-primary hover:text-primary-foreground;
+  }
+  
+  /* Card hover effects */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-1;
+  }
+  
+  /* Input focus effects */
+  .input-focus {
+    @apply transition-all duration-200 focus:ring-2 focus:ring-primary focus:border-primary;
+  }
+  
+  /* Status indicators */
+  .status-online {
+    @apply bg-green-500;
+  }
+  
+  .status-offline {
+    @apply bg-gray-400;
+  }
+  
+  .status-busy {
+    @apply bg-red-500;
+  }
+  
+  .status-away {
+    @apply bg-yellow-500;
+  }
+  
+  /* Progress indicators */
+  .progress-bar {
+    @apply w-full bg-muted rounded-full h-2 overflow-hidden;
+  }
+  
+  .progress-fill {
+    @apply bg-primary h-full rounded-full transition-all duration-300 ease-out;
+  }
+  
+  /* Notification badges */
+  .badge-notification {
+    @apply absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center;
+  }
+  
+  /* Skeleton loading */
+  .skeleton {
+    @apply animate-pulse bg-muted rounded;
+  }
+  
+  /* Glass morphism effect */
+  .glass {
+    @apply bg-background/80 backdrop-blur-sm border border-border/50;
+  }
+  
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Text utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Safe area utilities for mobile */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  /* Custom shadows */
+  .shadow-soft {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+  
+  .shadow-medium {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.12);
+  }
+  
+  .shadow-hard {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.16);
+  }
+}

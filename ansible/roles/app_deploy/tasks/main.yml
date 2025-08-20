@@ -1,0 +1,115 @@
+---
+# TimeTree Creator 애플리케이션 배포
+
+- name: 애플리케이션 소스 디렉토리 생성
+  file:
+    path: /opt/{{ project_name }}/app
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Git 리포지토리 클론 또는 업데이트
+  git:
+    repo: "{{ app_git_repo | default('https://github.com/your-repo/timetree-creator.git') }}"
+    dest: /opt/{{ project_name }}/app
+    version: "{{ app_git_branch | default('main') }}"
+    force: yes
+  become_user: "{{ ansible_user }}"
+  when: app_git_repo is defined
+
+- name: Docker Compose 설정 파일 복사
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/{{ project_name }}/docker-compose.yml
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  notify: restart app
+
+- name: 환경 설정 파일 복사
+  template:
+    src: app.env.j2
+    dest: /opt/{{ project_name }}/app.env
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  notify: restart app
+
+- name: Nginx 설정 파일 생성
+  template:
+    src: nginx.conf.j2
+    dest: /opt/{{ project_name }}/nginx.conf
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  notify: restart app
+
+- name: 애플리케이션 로그 디렉토리 생성
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  with_items:
+    - /opt/{{ project_name }}/logs/nginx
+    - /opt/{{ project_name }}/logs/app
+    - /opt/{{ project_name }}/logs/celery
+
+- name: Docker 이미지 빌드
+  docker_image:
+    name: "{{ project_name }}"
+    tag: "{{ app_version | default('latest') }}"
+    source: build
+    build:
+      path: /opt/{{ project_name }}/app/backend
+      dockerfile: Dockerfile
+    state: present
+  become_user: "{{ ansible_user }}"
+
+- name: 데이터베이스 마이그레이션 실행
+  docker_container:
+    name: "{{ project_name }}-migrate"
+    image: "{{ project_name }}:{{ app_version | default('latest') }}"
+    command: ["python", "manage.py", "migrate"]
+    env_file: /opt/{{ project_name }}/app.env
+    volumes:
+      - /opt/{{ project_name }}/logs:/app/logs
+    networks:
+      - name: "{{ project_name }}_default"
+    auto_remove: yes
+    state: started
+  become_user: "{{ ansible_user }}"
+
+- name: Docker Compose로 애플리케이션 시작
+  docker_compose:
+    project_src: /opt/{{ project_name }}
+    state: present
+    pull: yes
+  become_user: "{{ ansible_user }}"
+
+- name: 애플리케이션 헬스 체크
+  uri:
+    url: "http://{{ ansible_host }}:8000/api/health/"
+    method: GET
+    status_code: 200
+  register: health_check
+  retries: 5
+  delay: 10
+  until: health_check is succeeded
+
+- name: 애플리케이션 systemd 서비스 파일 생성
+  template:
+    src: timetree-creator.service.j2
+    dest: /etc/systemd/system/{{ project_name }}.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart app service
+
+- name: 애플리케이션 서비스 활성화
+  systemd:
+    name: "{{ project_name }}"
+    enabled: yes
+    state: started

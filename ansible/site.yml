@@ -1,0 +1,43 @@
+---
+# TimeTree Event Creator 메인 플레이북
+# 전체 인프라를 설정합니다
+
+- name: 공통 설정 적용
+  hosts: all
+  become: yes
+  gather_facts: yes
+  roles:
+    - common
+
+- name: 데이터베이스 서버 설정
+  hosts: database_servers
+  become: yes
+  roles:
+    - postgresql
+    - backup
+
+- name: 캐시 서버 설정  
+  hosts: cache_servers
+  become: yes
+  roles:
+    - redis
+
+- name: 웹 애플리케이션 서버 설정
+  hosts: web_servers
+  become: yes
+  roles:
+    - docker
+    - app_deploy
+
+- name: 로드 밸런서 설정
+  hosts: load_balancer
+  become: yes
+  roles:
+    - nginx_lb
+    - ssl
+
+- name: 모니터링 설정
+  hosts: all
+  become: yes
+  roles:
+    - monitoring

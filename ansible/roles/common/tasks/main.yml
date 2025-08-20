@@ -1,0 +1,146 @@
+---
+# 모든 서버에 적용할 공통 설정
+
+- name: 시스템 패키지 업데이트
+  apt:
+    update_cache: yes
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+  tags: [system]
+
+- name: 필수 패키지 설치
+  apt:
+    name:
+      - curl
+      - wget
+      - unzip
+      - git
+      - htop
+      - vim
+      - ufw
+      - fail2ban
+      - logrotate
+      - rsync
+      - python3
+      - python3-pip
+      - certbot
+    state: present
+  tags: [packages]
+
+- name: 타임존 설정
+  timezone:
+    name: Asia/Seoul
+  notify: restart cron
+  tags: [timezone]
+
+- name: SSH 보안 설정
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: yes
+  with_items:
+    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+    - { regexp: '^#?Port', line: 'Port 22' }
+    - { regexp: '^#?MaxAuthTries', line: 'MaxAuthTries 3' }
+  notify: restart ssh
+  tags: [security]
+
+- name: UFW 방화벽 설정
+  ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default('tcp') }}"
+    from_ip: "{{ item.from | default('any') }}"
+  with_items:
+    - { rule: allow, port: 22 }  # SSH
+    - { rule: allow, port: 80 }  # HTTP
+    - { rule: allow, port: 443 } # HTTPS
+    - { rule: deny, port: 25 }   # SMTP (보안)
+  notify: enable ufw
+  tags: [firewall]
+
+- name: fail2ban 설정
+  copy:
+    content: |
+      [sshd]
+      enabled = true
+      port = 22
+      filter = sshd
+      logpath = /var/log/auth.log
+      maxretry = 3
+      bantime = 3600
+      findtime = 600
+      
+      [nginx-http-auth]
+      enabled = true
+      filter = nginx-http-auth
+      logpath = /var/log/nginx/error.log
+      maxretry = 5
+      bantime = 3600
+    dest: /etc/fail2ban/jail.local
+    backup: yes
+  notify: restart fail2ban
+  tags: [security]
+
+- name: 로그 로테이션 설정
+  copy:
+    content: |
+      /var/log/{{ project_name }}/*.log {
+          daily
+          missingok
+          rotate 30
+          compress
+          delaycompress
+          notifempty
+          create 644 {{ ansible_user }} {{ ansible_user }}
+          postrotate
+              systemctl reload nginx > /dev/null 2>&1 || true
+          endscript
+      }
+    dest: /etc/logrotate.d/{{ project_name }}
+  tags: [logging]
+
+- name: 애플리케이션 디렉토리 생성
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  with_items:
+    - /opt/{{ project_name }}
+    - /opt/{{ project_name }}/logs
+    - /opt/{{ project_name }}/backup
+    - /opt/{{ project_name }}/ssl
+  tags: [directories]
+
+- name: 환경변수 파일 생성
+  template:
+    src: environment.j2
+    dest: /opt/{{ project_name }}/.env
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  tags: [environment]
+
+- name: 크론탭 정리 작업 추가
+  cron:
+    name: "{{ item.name }}"
+    minute: "{{ item.minute }}"
+    hour: "{{ item.hour }}"
+    day: "{{ item.day | default('*') }}"
+    job: "{{ item.job }}"
+    user: root
+  with_items:
+    - name: "시스템 로그 정리"
+      minute: "0"
+      hour: "2"
+      job: "find /var/log -name '*.log' -mtime +30 -delete"
+    - name: "임시 파일 정리"
+      minute: "30"
+      hour: "3"
+      job: "find /tmp -type f -mtime +7 -delete"
+  tags: [cleanup]

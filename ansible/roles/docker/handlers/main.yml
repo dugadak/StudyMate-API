@@ -1,0 +1,8 @@
+---
+# Docker 관련 핸들러
+
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+    daemon_reload: yes
