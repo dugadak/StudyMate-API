@@ -16,7 +16,7 @@ class User(AbstractUser):
     is_email_verified = models.BooleanField(default=False, help_text="이메일 인증 완료 여부")
     failed_login_attempts = models.PositiveIntegerField(default=0, help_text="연속 로그인 실패 횟수")
     account_locked_until = models.DateTimeField(null=True, blank=True, help_text="계정 잠금 해제 시간")
-    last_password_change = models.DateTimeField(auto_now_add=True, help_text="마지막 비밀번호 변경 시간")
+    last_password_change = models.DateTimeField(default=timezone.now, help_text="마지막 비밀번호 변경 시간", null=True, blank=True)
 
     # Two-factor authentication
     is_2fa_enabled = models.BooleanField(default=False, help_text="2단계 인증 활성화 여부")
@@ -37,7 +37,7 @@ class User(AbstractUser):
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    last_activity = models.DateTimeField(auto_now=True)
+    last_activity = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]

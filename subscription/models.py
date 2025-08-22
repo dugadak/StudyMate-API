@@ -230,7 +230,7 @@ class UserSubscription(models.Model):
         default='active',
         db_index=True
     )
-    started_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    started_at = models.DateTimeField(auto_now_add=True, db_index=True, null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
     trial_ends_at = models.DateTimeField(null=True, blank=True)
     canceled_at = models.DateTimeField(null=True, blank=True)

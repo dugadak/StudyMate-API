@@ -113,7 +113,7 @@ class NotificationSchedule(models.Model):
         NotificationTemplate,
         on_delete=models.CASCADE,
         related_name='schedules'
-    )
+    , null=True, blank=True)
     notification_time = models.TimeField()
     recurrence_type = models.CharField(
         max_length=20, 
@@ -533,7 +533,7 @@ class DeviceToken(models.Model):
     failure_count = models.IntegerField(default=0)
     last_failure_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    last_used_at = models.DateTimeField(auto_now=True)
+    last_used_at = models.DateTimeField(auto_now=True, null=True, blank=True)
     
     class Meta:
         unique_together = ['user', 'token']

@@ -186,7 +186,7 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
     readonly_fields = [
         'stripe_subscription_id', 'stripe_customer_id', 'started_at',
         'is_active', 'is_trial', 'days_remaining', 'trial_days_remaining',
-        'effective_price', 'created_at', 'updated_at'
+        'created_at', 'updated_at'
     ]
     date_hierarchy = 'started_at'
     ordering = ['-started_at']
@@ -457,7 +457,7 @@ class UsageCreditAdmin(admin.ModelAdmin):
         'user__email', 'user__first_name', 'user__last_name'
     ]
     readonly_fields = [
-        'remaining_credits', 'daily_remaining', 'usage_percentage',
+        'remaining_credits', 'daily_remaining',
         'created_at', 'updated_at'
     ]
     ordering = ['user__email', 'credit_type']

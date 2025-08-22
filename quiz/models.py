@@ -396,12 +396,12 @@ class QuizAttempt(models.Model):
     )
     is_correct = models.BooleanField(
         help_text="정답 여부"
-    )
+    , default=False)
     
     # Timing
     started_at = models.DateTimeField(
         help_text="시작 시간"
-    )
+    , null=True, blank=True)
     attempted_at = models.DateTimeField(
         auto_now_add=True,
         help_text="제출 시간"
@@ -610,7 +610,7 @@ class QuizSession(models.Model):
         choices=STATUS_CHOICES,
         default='active'
     )
-    started_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     completed_at = models.DateTimeField(
         null=True, 
         blank=True,

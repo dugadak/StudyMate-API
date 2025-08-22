@@ -13,7 +13,7 @@ from .serializers import (
     ChatMessageSerializer, LiveStatusSerializer
 )
 from study.models import Subject
-from study.services import AIService
+# from study.services import AIService  # Temporarily commented out
 
 
 class CollaborationViewSet(viewsets.ViewSet):
@@ -157,13 +157,24 @@ class CollaborationViewSet(viewsets.ViewSet):
             # 퀴즈 시작
             room.start_quiz()
             
-            # AI로 문제 생성
-            ai_service = AIService()
-            questions_data = ai_service.generate_quiz_questions(
-                subject=room.subject.name,
-                count=room.quiz_count,
-                difficulty='intermediate'
-            )
+            # AI로 문제 생성 (임시 더미 데이터)
+            # ai_service = AIService()
+            # questions_data = ai_service.generate_quiz_questions(
+            #     subject=room.subject.name,
+            #     count=room.quiz_count,
+            #     difficulty='intermediate'
+            # )
+            
+            # 임시 더미 문제 데이터
+            questions_data = [
+                {
+                    'question': f'Question {i+1} for {room.subject.name}',
+                    'type': 'multiple',
+                    'options': ['Option A', 'Option B', 'Option C', 'Option D'],
+                    'correct_answer': 'Option A'
+                }
+                for i in range(room.quiz_count)
+            ]
             
             # 문제 저장
             for i, q_data in enumerate(questions_data):

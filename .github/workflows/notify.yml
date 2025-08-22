@@ -1,0 +1,123 @@
+name: Email Notification Workflow
+
+on:
+  workflow_call:
+    inputs:
+      status:
+        required: true
+        type: string
+      workflow_name:
+        required: true
+        type: string
+      job_name:
+        required: false
+        type: string
+        default: "CI/CD Pipeline"
+    secrets:
+      EMAIL_ADDRESS:
+        required: true
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    if: inputs.status == 'failure'
+    
+    steps:
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          secure: false
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "❌ ${{ inputs.workflow_name }} Failed"
+          to: yya70bb@gmail.com
+          from: GitHub Actions <noreply@github.com>
+          body: |
+            StudyMate API CI/CD Pipeline Failed
+            
+            ====================================
+            Workflow: ${{ inputs.workflow_name }}
+            Job: ${{ inputs.job_name }}
+            Status: ${{ inputs.status }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Commit Message: ${{ github.event.head_commit.message }}
+            Author: ${{ github.actor }}
+            Time: ${{ github.event.head_commit.timestamp }}
+            
+            Action URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            Please check the GitHub Actions logs for more details.
+            ====================================
+          html_body: |
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; }
+                    .container { padding: 20px; background-color: #f5f5f5; }
+                    .header { background-color: #dc3545; color: white; padding: 15px; border-radius: 5px; }
+                    .content { background-color: white; padding: 20px; margin-top: 10px; border-radius: 5px; }
+                    .footer { margin-top: 20px; padding: 10px; text-align: center; color: #666; }
+                    table { width: 100%; border-collapse: collapse; }
+                    td { padding: 8px; border-bottom: 1px solid #ddd; }
+                    .label { font-weight: bold; width: 30%; }
+                    .button { display: inline-block; padding: 10px 20px; background-color: #0366d6; color: white; text-decoration: none; border-radius: 5px; margin-top: 15px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>❌ StudyMate API - ${{ inputs.workflow_name }} Failed</h2>
+                    </div>
+                    <div class="content">
+                        <h3>Build Details</h3>
+                        <table>
+                            <tr>
+                                <td class="label">Workflow:</td>
+                                <td>${{ inputs.workflow_name }}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Job:</td>
+                                <td>${{ inputs.job_name }}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Status:</td>
+                                <td style="color: red; font-weight: bold;">FAILED</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Repository:</td>
+                                <td>${{ github.repository }}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Branch:</td>
+                                <td>${{ github.ref_name }}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Commit:</td>
+                                <td>${{ github.sha }}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Author:</td>
+                                <td>${{ github.actor }}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Time:</td>
+                                <td>${{ github.event.head_commit.timestamp }}</td>
+                            </tr>
+                        </table>
+                        
+                        <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" class="button">
+                            View Details on GitHub
+                        </a>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated message from GitHub Actions</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        continue-on-error: true

@@ -7,6 +7,11 @@ from datetime import timedelta, date
 import json
 
 
+def default_study_days():
+    """Default study days function for migration compatibility"""
+    return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
+
+
 class Subject(models.Model):
     """Enhanced Subject model with metadata and categorization"""
     
@@ -239,7 +244,7 @@ class StudySettings(models.Model):
     
     # Study schedule
     study_days = models.JSONField(
-        default=lambda: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+        default=default_study_days,
         help_text="학습 요일들"
     )
     preferred_study_duration = models.PositiveIntegerField(
@@ -417,7 +422,7 @@ class StudySummary(models.Model):
     generation_time = models.FloatField(
         null=True,
         blank=True,
-        help_text="생성 시간 (초)"
+        help_text="생성 시간 (초, default=0)"
     )
     token_count = models.PositiveIntegerField(
         null=True,
