@@ -1,0 +1,203 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # 수동 실행 가능
+
+env:
+  EC2_HOST: ${{ secrets.EC2_HOST }}
+  EC2_USER: ec2-user
+  EC2_KEY: ${{ secrets.EC2_PRIVATE_KEY }}
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: studymate_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          DEBUG=False
+          SECRET_KEY=test-secret-key-for-ci-cd-pipeline
+          DATABASE_URL=postgresql://testuser:testpass@localhost:5432/studymate_test
+          REDIS_URL=redis://localhost:6379/0
+          ALLOWED_HOSTS=localhost,127.0.0.1
+          EOF
+      
+      - name: Run migrations
+        run: |
+          python manage.py migrate
+      
+      - name: Run tests
+        run: |
+          python manage.py test --parallel
+      
+      - name: Run linting
+        run: |
+          ruff check .
+        continue-on-error: true  # 린팅 에러는 배포를 막지 않음
+
+  deploy:
+    name: Deploy to EC2
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config << EOF
+          Host ec2
+            HostName ${{ secrets.EC2_HOST }}
+            User ec2-user
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+          EOF
+      
+      - name: Check EC2 connectivity
+        run: |
+          ssh ec2 "echo 'Connected to EC2 successfully'"
+      
+      - name: Deploy application
+        run: |
+          ssh ec2 << 'ENDSSH'
+            # 배포 스크립트 실행
+            cd ~/apps/StudyMate-API
+            
+            # 스크립트 권한 설정
+            chmod +x scripts/deploy.sh
+            
+            # 배포 실행
+            ./scripts/deploy.sh
+            
+            # 배포 상태 확인
+            if [ $? -eq 0 ]; then
+              echo "Deployment successful!"
+            else
+              echo "Deployment failed!"
+              exit 1
+            fi
+          ENDSSH
+      
+      - name: Health check
+        run: |
+          sleep 10
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}/health/)
+          if [ "$response" = "200" ]; then
+            echo "Health check passed!"
+          else
+            echo "Health check failed with status code: $response"
+            exit 1
+          fi
+      
+      - name: Send notification
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            Deployment ${{ job.status }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true  # Slack 알림 실패는 배포를 막지 않음
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure() && needs.deploy.result == 'failure'
+    needs: deploy
+    
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config << EOF
+          Host ec2
+            HostName ${{ secrets.EC2_HOST }}
+            User ec2-user
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+          EOF
+      
+      - name: Rollback to previous version
+        run: |
+          ssh ec2 << 'ENDSSH'
+            cd ~/apps/StudyMate-API
+            
+            # 롤백 스크립트 실행
+            if [ -f scripts/rollback.sh ]; then
+              chmod +x scripts/rollback.sh
+              ./scripts/rollback.sh
+            else
+              echo "Rollback script not found. Manual intervention required."
+              exit 1
+            fi
+          ENDSSH
+      
+      - name: Send rollback notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              text: "⚠️ Deployment failed and rolled back",
+              attachments: [{
+                color: 'warning',
+                text: 'Manual verification required'
+              }]
+            }
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        continue-on-error: true

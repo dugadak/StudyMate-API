@@ -1,292 +1,382 @@
 #!/bin/bash
 
-# StudyMate API 배포 스크립트
+# StudyMate API 무중단 배포 스크립트 (프리티어 최적화)
+# 최소 리소스로 Blue-Green 배포 구현
+
 set -e
 
-# 색상 코드
+echo "=========================================="
+echo "StudyMate API Zero-Downtime Deployment"
+echo "AWS Free Tier Optimized Version"
+echo "=========================================="
+
+# 설정
+APP_DIR="/home/ec2-user/apps/StudyMate-API"
+VENV_DIR="$APP_DIR/venv"
+LOG_DIR="/home/ec2-user/apps/logs"
+BACKUP_DIR="/home/ec2-user/apps/backups"
+PORT_GREEN=8000
+PORT_BLUE=8001
+CURRENT_PORT_FILE="$APP_DIR/.current_port"
+MAX_WORKERS=2  # 프리티어 t2.micro용 최적 워커 수
+
+# 색상 출력
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 함수 정의
+# 로그 함수
 log_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+    echo -e "${GREEN}[INFO]${NC} $1"
 }
 
-log_success() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-log_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
 log_error() {
-    echo -e "${RED}❌ $1${NC}"
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# 환경 변수 설정
-ENVIRONMENT=${ENVIRONMENT:-production}
-IMAGE_TAG=${IMAGE_TAG:-latest}
-REGISTRY=${REGISTRY:-studymate}
-IMAGE_NAME=${IMAGE_NAME:-api}
-FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-
-log_info "StudyMate API 배포 시작"
-log_info "환경: ${ENVIRONMENT}"
-log_info "이미지: ${FULL_IMAGE}"
-
-# 필수 도구 확인
-check_requirements() {
-    log_info "필수 도구 확인 중..."
-    
-    if ! command -v docker &> /dev/null; then
-        log_error "Docker가 설치되지 않았습니다."
-        exit 1
-    fi
-    
-    if [[ "$ENVIRONMENT" == "kubernetes" ]]; then
-        if ! command -v kubectl &> /dev/null; then
-            log_error "kubectl이 설치되지 않았습니다."
-            exit 1
-        fi
+# 현재 활성 포트 확인
+get_current_port() {
+    if [ -f "$CURRENT_PORT_FILE" ]; then
+        cat "$CURRENT_PORT_FILE"
     else
-        if ! command -v docker-compose &> /dev/null; then
-            log_error "docker-compose가 설치되지 않았습니다."
-            exit 1
-        fi
+        echo "$PORT_GREEN"
     fi
-    
-    log_success "필수 도구 확인 완료"
 }
 
-# Docker 이미지 빌드
-build_image() {
-    log_info "Docker 이미지 빌드 중..."
-    
-    if [[ "$ENVIRONMENT" == "development" ]]; then
-        docker build -f Dockerfile.dev -t "${FULL_IMAGE}" .
+# 다음 배포 포트 결정
+get_next_port() {
+    current=$(get_current_port)
+    if [ "$current" == "$PORT_GREEN" ]; then
+        echo "$PORT_BLUE"
     else
-        docker build -f Dockerfile -t "${FULL_IMAGE}" .
-    fi
-    
-    log_success "Docker 이미지 빌드 완료: ${FULL_IMAGE}"
-}
-
-# 이미지 푸시 (프로덕션 환경)
-push_image() {
-    if [[ "$ENVIRONMENT" == "production" || "$ENVIRONMENT" == "staging" ]]; then
-        log_info "Docker 이미지 푸시 중..."
-        docker push "${FULL_IMAGE}"
-        log_success "Docker 이미지 푸시 완료"
+        echo "$PORT_GREEN"
     fi
 }
 
-# Docker Compose 배포
-deploy_docker_compose() {
-    log_info "Docker Compose로 배포 중..."
-    
-    if [[ "$ENVIRONMENT" == "development" ]]; then
-        docker-compose -f docker-compose.dev.yml down --remove-orphans
-        docker-compose -f docker-compose.dev.yml up -d --build
-    else
-        docker-compose down --remove-orphans
-        docker-compose up -d --build
+# 메모리 체크 (프리티어 t2.micro는 1GB RAM)
+check_memory() {
+    local available_mem=$(free -m | awk 'NR==2{print $7}')
+    if [ "$available_mem" -lt 200 ]; then
+        log_warn "메모리 부족 (${available_mem}MB). 캐시 정리 중..."
+        sync
+        echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+        
+        # Redis 메모리 정리
+        redis-cli FLUSHDB
+        log_info "캐시 정리 완료"
     fi
-    
-    log_success "Docker Compose 배포 완료"
 }
 
-# Kubernetes 배포
-deploy_kubernetes() {
-    log_info "Kubernetes로 배포 중..."
+# 백업 생성 (프리티어 스토리지 절약)
+create_backup() {
+    log_info "이전 버전 백업 중..."
     
-    # 네임스페이스 생성
-    kubectl apply -f k8s/namespace.yaml
+    # 백업 디렉토리 생성
+    mkdir -p "$BACKUP_DIR"
     
-    # ConfigMap 및 Secret 적용
-    kubectl apply -f k8s/configmap.yaml
-    kubectl apply -f k8s/secrets.yaml
+    # 오래된 백업 삭제 (3개만 유지 - 스토리지 절약)
+    cd "$BACKUP_DIR"
+    ls -t | tail -n +4 | xargs -r rm -rf
     
-    # 데이터베이스 및 Redis 배포
-    kubectl apply -f k8s/postgres.yaml
-    kubectl apply -f k8s/redis.yaml
-    
-    # API 서비스 배포
-    kubectl apply -f k8s/api.yaml
-    
-    # HPA 설정
-    kubectl apply -f k8s/hpa.yaml
-    
-    # Ingress 설정
-    kubectl apply -f k8s/ingress.yaml
-    
-    log_success "Kubernetes 배포 완료"
+    # 현재 코드 백업
+    if [ -d "$APP_DIR" ]; then
+        backup_name="backup_$(date +%Y%m%d_%H%M%S).tar.gz"
+        tar -czf "$BACKUP_DIR/$backup_name" \
+            --exclude="$APP_DIR/venv" \
+            --exclude="$APP_DIR/staticfiles" \
+            --exclude="$APP_DIR/media" \
+            --exclude="$APP_DIR/logs" \
+            --exclude="$APP_DIR/.git" \
+            "$APP_DIR" 2>/dev/null || true
+        log_info "백업 완료: $backup_name"
+    fi
 }
 
-# 헬스체크
+# Git Pull & 의존성 설치
+update_code() {
+    log_info "코드 업데이트 중..."
+    
+    cd "$APP_DIR"
+    
+    # Git pull
+    git fetch --all
+    git reset --hard origin/main
+    
+    # 가상환경 활성화
+    source "$VENV_DIR/bin/activate"
+    
+    # 의존성 업데이트 (변경사항이 있을 때만)
+    if git diff HEAD@{1} HEAD --name-only | grep -q "requirements.txt"; then
+        log_info "의존성 업데이트 중..."
+        pip install -r requirements.txt --no-cache-dir  # 캐시 사용 안함 (스토리지 절약)
+    fi
+}
+
+# 데이터베이스 마이그레이션
+run_migrations() {
+    log_info "데이터베이스 마이그레이션 실행 중..."
+    
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    
+    # 마이그레이션 체크
+    python manage.py showmigrations --plan | grep -q "\[ \]" && {
+        python manage.py migrate --noinput
+        log_info "마이그레이션 완료"
+    } || {
+        log_info "마이그레이션 필요 없음"
+    }
+}
+
+# 정적 파일 수집
+collect_static() {
+    log_info "정적 파일 수집 중..."
+    
+    cd "$APP_DIR"
+    source "$VENV_DIR/bin/activate"
+    
+    python manage.py collectstatic --noinput --clear
+}
+
+# 새 인스턴스 시작
+start_new_instance() {
+    local port=$1
+    local session_name="studymate_$port"
+    
+    log_info "새 인스턴스 시작 중 (포트: $port)..."
+    
+    # 기존 tmux 세션 종료
+    tmux kill-session -t "$session_name" 2>/dev/null || true
+    
+    # 새 tmux 세션에서 Gunicorn 시작
+    tmux new-session -d -s "$session_name" -c "$APP_DIR" "
+        source $VENV_DIR/bin/activate
+        gunicorn studymate_api.wsgi:application \
+            --bind 127.0.0.1:$port \
+            --workers $MAX_WORKERS \
+            --threads 2 \
+            --worker-class sync \
+            --worker-connections 100 \
+            --max-requests 1000 \
+            --max-requests-jitter 50 \
+            --timeout 30 \
+            --graceful-timeout 20 \
+            --access-logfile $LOG_DIR/access.log \
+            --error-logfile $LOG_DIR/error.log \
+            --log-level info \
+            --capture-output \
+            --enable-stdio-inheritance
+    "
+    
+    log_info "tmux 세션 '$session_name' 시작됨"
+}
+
+# 헬스 체크
 health_check() {
-    log_info "헬스체크 수행 중..."
+    local port=$1
+    local max_attempts=30
+    local attempt=0
     
-    if [[ "$ENVIRONMENT" == "kubernetes" ]]; then
-        # Kubernetes 서비스 확인
-        kubectl wait --for=condition=ready pod -l app=studymate-api -n studymate --timeout=300s
-        
-        # 포트 포워딩으로 헬스체크
-        kubectl port-forward service/studymate-api-service 8000:8000 -n studymate &
-        FORWARD_PID=$!
-        sleep 5
-        
-        HEALTH_URL="http://localhost:8000/health/"
-    else
-        # Docker Compose 서비스 확인
-        sleep 30  # 서비스 시작 대기
-        HEALTH_URL="http://localhost:8000/health/"
-    fi
+    log_info "헬스 체크 중 (포트: $port)..."
     
-    # 헬스체크 수행
-    for i in {1..10}; do
-        if curl -f "${HEALTH_URL}" > /dev/null 2>&1; then
-            log_success "헬스체크 통과"
-            if [[ "$ENVIRONMENT" == "kubernetes" ]]; then
-                kill $FORWARD_PID 2>/dev/null || true
-            fi
+    while [ $attempt -lt $max_attempts ]; do
+        if curl -f -s -o /dev/null "http://127.0.0.1:$port/health/"; then
+            log_info "헬스 체크 성공!"
             return 0
         fi
-        log_warning "헬스체크 시도 ${i}/10 실패, 10초 후 재시도..."
-        sleep 10
+        
+        attempt=$((attempt + 1))
+        sleep 2
     done
     
-    log_error "헬스체크 실패"
-    if [[ "$ENVIRONMENT" == "kubernetes" ]]; then
-        kill $FORWARD_PID 2>/dev/null || true
-    fi
-    exit 1
+    log_error "헬스 체크 실패!"
+    return 1
 }
 
-# 배포 후 정리
-cleanup() {
-    log_info "배포 후 정리 중..."
+# Nginx 설정 업데이트
+update_nginx() {
+    local port=$1
     
-    # 사용하지 않는 Docker 이미지 정리
-    docker image prune -f
+    log_info "Nginx 설정 업데이트 중 (포트: $port)..."
     
-    log_success "정리 완료"
+    # Nginx 설정 파일 생성
+    sudo tee /etc/nginx/conf.d/studymate.conf > /dev/null << EOF
+# StudyMate API Nginx Configuration
+# Auto-generated by deploy script
+
+upstream studymate_backend {
+    server 127.0.0.1:$port;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name _;
+    
+    client_max_body_size 10M;
+    
+    # 프리티어 최적화 설정
+    keepalive_timeout 65;
+    keepalive_requests 100;
+    
+    # Gzip 압축 (대역폭 절약)
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript 
+               application/x-javascript application/xml+rss 
+               application/javascript application/json;
+    
+    # 정적 파일 (캐싱으로 성능 향상)
+    location /static/ {
+        alias $APP_DIR/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    location /media/ {
+        alias $APP_DIR/media/;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+    
+    # API 프록시
+    location / {
+        proxy_pass http://studymate_backend;
+        proxy_http_version 1.1;
+        
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # 연결 재사용
+        proxy_set_header Connection "";
+        
+        # 타임아웃 설정
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+        
+        # 버퍼 설정 (메모리 절약)
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
+    }
+    
+    # 헬스 체크 엔드포인트
+    location /health/ {
+        proxy_pass http://studymate_backend/health/;
+        access_log off;
+    }
+}
+EOF
+    
+    # Nginx 설정 테스트
+    sudo nginx -t
+    
+    # Nginx 리로드
+    sudo systemctl reload nginx
+    
+    log_info "Nginx 설정 업데이트 완료"
+}
+
+# 이전 인스턴스 종료
+stop_old_instance() {
+    local port=$1
+    local session_name="studymate_$port"
+    
+    log_info "이전 인스턴스 종료 중 (포트: $port)..."
+    
+    # Graceful shutdown
+    tmux send-keys -t "$session_name" C-c 2>/dev/null || true
+    sleep 5
+    
+    # 강제 종료
+    tmux kill-session -t "$session_name" 2>/dev/null || true
+    
+    log_info "이전 인스턴스 종료 완료"
 }
 
 # 롤백 함수
 rollback() {
-    log_warning "롤백 수행 중..."
+    log_error "배포 실패! 롤백 중..."
     
-    if [[ "$ENVIRONMENT" == "kubernetes" ]]; then
-        kubectl rollout undo deployment/studymate-api -n studymate
-        kubectl rollout status deployment/studymate-api -n studymate
-    else
-        # 이전 버전으로 롤백 (이전 이미지 태그 필요)
-        PREVIOUS_TAG=${PREVIOUS_TAG:-previous}
-        PREVIOUS_IMAGE="${REGISTRY}/${IMAGE_NAME}:${PREVIOUS_TAG}"
-        
-        log_info "이전 이미지로 롤백: ${PREVIOUS_IMAGE}"
-        docker tag "${PREVIOUS_IMAGE}" "${FULL_IMAGE}"
-        
-        if [[ "$ENVIRONMENT" == "development" ]]; then
-            docker-compose -f docker-compose.dev.yml up -d
-        else
-            docker-compose up -d
+    local current_port=$(get_current_port)
+    update_nginx "$current_port"
+    
+    # 최신 백업 복구
+    if [ -d "$BACKUP_DIR" ]; then
+        latest_backup=$(ls -t "$BACKUP_DIR" | head -1)
+        if [ -n "$latest_backup" ]; then
+            log_info "백업 복구 중: $latest_backup"
+            tar -xzf "$BACKUP_DIR/$latest_backup" -C / 2>/dev/null || true
         fi
     fi
     
-    log_success "롤백 완료"
+    log_error "롤백 완료. 수동 확인이 필요합니다."
+    exit 1
 }
 
 # 메인 배포 프로세스
 main() {
-    # 신호 처리 (롤백용)
-    trap 'log_error "배포 중단됨"; rollback; exit 1' INT TERM
+    log_info "배포 시작: $(date)"
     
-    check_requirements
+    # 메모리 체크
+    check_memory
     
-    # 이미지 빌드
-    build_image
+    # 현재/다음 포트 결정
+    CURRENT_PORT=$(get_current_port)
+    NEXT_PORT=$(get_next_port)
     
-    # 이미지 푸시 (필요한 경우)
-    push_image
+    log_info "현재 포트: $CURRENT_PORT, 배포 포트: $NEXT_PORT"
     
-    # 환경에 따른 배포
-    case "$ENVIRONMENT" in
-        "kubernetes")
-            deploy_kubernetes
-            ;;
-        "development")
-            deploy_docker_compose
-            ;;
-        "production"|"staging")
-            deploy_docker_compose
-            ;;
-        *)
-            log_error "지원하지 않는 환경: $ENVIRONMENT"
-            exit 1
-            ;;
-    esac
+    # 백업 생성
+    create_backup
     
-    # 헬스체크
-    health_check
+    # 코드 업데이트
+    update_code || rollback
     
-    # 정리
-    cleanup
+    # 마이그레이션
+    run_migrations || rollback
     
-    log_success "🎉 StudyMate API 배포 완료!"
-    log_info "서비스 URL: http://localhost:8000"
-    log_info "헬스체크: http://localhost:8000/health/"
-    log_info "API 문서: http://localhost:8000/api/docs/"
+    # 정적 파일 수집
+    collect_static || rollback
+    
+    # 새 인스턴스 시작
+    start_new_instance "$NEXT_PORT"
+    
+    # 헬스 체크
+    if health_check "$NEXT_PORT"; then
+        # Nginx 설정 변경
+        update_nginx "$NEXT_PORT"
+        
+        # 포트 정보 저장
+        echo "$NEXT_PORT" > "$CURRENT_PORT_FILE"
+        
+        # 10초 대기 (안정화)
+        sleep 10
+        
+        # 이전 인스턴스 종료
+        stop_old_instance "$CURRENT_PORT"
+        
+        log_info "=========================================="
+        log_info "배포 성공! 새 인스턴스가 포트 $NEXT_PORT에서 실행 중"
+        log_info "완료 시간: $(date)"
+        log_info "=========================================="
+    else
+        rollback
+    fi
+    
+    # 메모리 정리
+    check_memory
 }
 
-# 사용법 출력
-usage() {
-    echo "사용법: $0 [OPTIONS]"
-    echo ""
-    echo "옵션:"
-    echo "  -e, --environment ENVIRONMENT    배포 환경 (development|staging|production|kubernetes)"
-    echo "  -t, --tag TAG                    Docker 이미지 태그"
-    echo "  -r, --registry REGISTRY          Docker 레지스트리"
-    echo "  -h, --help                       도움말 출력"
-    echo ""
-    echo "예시:"
-    echo "  $0 -e development                 # 개발 환경 배포"
-    echo "  $0 -e production -t v1.0.0        # 프로덕션 환경 배포"
-    echo "  $0 -e kubernetes -r myregistry    # Kubernetes 배포"
-}
-
-# 명령행 인수 처리
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -e|--environment)
-            ENVIRONMENT="$2"
-            shift 2
-            ;;
-        -t|--tag)
-            IMAGE_TAG="$2"
-            FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-            shift 2
-            ;;
-        -r|--registry)
-            REGISTRY="$2"
-            FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-            shift 2
-            ;;
-        -h|--help)
-            usage
-            exit 0
-            ;;
-        *)
-            log_error "알 수 없는 옵션: $1"
-            usage
-            exit 1
-            ;;
-    esac
-done
-
-# 메인 함수 실행
-main
+# 스크립트 실행
+main "$@"
