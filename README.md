@@ -22,6 +22,11 @@
 
 **StudyMate API**는 AI 기술을 활용한 개인화 학습 플랫폼의 백엔드 서버입니다. Django REST Framework를 기반으로 구축되었으며, 실시간 협업, 지능형 콘텐츠 생성, 학습 분석 등 고급 기능을 제공합니다.
 
+### 🌐 라이브 서버
+- **API 서버**: http://54.161.77.144/
+- **상태**: ✅ 운영 중
+- **문서**: [배포 현황](./DEPLOYMENT_STATUS.md)
+
 ### ✨ 주요 특징
 
 - 🤖 **AI 기반 학습**: OpenAI/Anthropic API를 활용한 콘텐츠 생성
@@ -162,11 +167,12 @@ main 브랜치에 푸시하면 자동으로 배포됩니다:
 
 #### 3️⃣ 수동 배포
 ```bash
-cd ~/apps/StudyMate-API
-./scripts/deploy.sh
+# 로컬에서 배포 스크립트 실행
+cd scripts/deploy
+./deploy_to_ec2.sh
 ```
 
-자세한 내용은 [DEPLOYMENT.md](DEPLOYMENT.md) 참조
+자세한 내용은 [DEPLOYMENT.md](DEPLOYMENT.md) 및 [배포 현황](DEPLOYMENT_STATUS.md) 참조
 
 ### 🔑 GitHub Secrets 설정
 
