@@ -15,9 +15,12 @@ db.sqlite3-journal
 
 # Environment
 .env
+.env.*
+!.env.example
 venv/
 env/
 ENV/
+*.env
 
 # IDE
 .vscode/
@@ -53,3 +56,74 @@ celerybeat-schedule
 
 # Redis dump
 dump.rdb
+
+# Security - API Keys & Secrets
+*.pem
+*.key
+*.crt
+*.p12
+.secrets/
+secrets/
+private/
+
+# AWS
+.aws/
+aws-credentials
+.boto
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+*.temp
+*~
+*.orig
+
+# Logs
+logs/
+*.log
+*.out
+*.err
+
+# Test coverage
+htmlcov/
+.coverage.*
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+migrations/
+
+# Node (if using for frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Server specific
+.current_port
+tmux-*.log
+
+# CI/CD
+.github/workflows/local/
+deploy-key
+deploy-key.pub
+
+# Documentation builds
+docs/_build/
+site/
+
+# Temporary files
+/tmp
+/temp
+*.swp
+*.swo
+*.swn
+
+# Mac
+.AppleDouble
+.LSOverride
+
+# Deployment
+StudyMate-Flutter/
