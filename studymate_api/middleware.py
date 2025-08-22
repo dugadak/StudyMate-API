@@ -12,6 +12,7 @@ This module provides:
 import time
 import logging
 import json
+import re
 from django.utils.deprecation import MiddlewareMixin
 from django.utils import timezone
 from django.http import JsonResponse

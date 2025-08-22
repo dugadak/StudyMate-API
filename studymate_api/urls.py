@@ -44,15 +44,9 @@ urlpatterns = [
     path('api/quiz/', include('quiz.urls')),
     path('api/subscription/', include('subscription.urls')),
     path('api/notifications/', include('notifications.urls')),
-    
-    # CQRS API (명령/조회 분리 패턴)
-    path('api/cqrs/', include('studymate_api.cqrs_urls')),
-    
-    # A/B Testing API
-    path('api/ab-testing/', include('studymate_api.urls.ab_testing_urls')),
-    
-    # Auto Recovery API
-    path('api/auto-recovery/', include('studymate_api.urls.auto_recovery_urls')),
+    path('api/home/', include('home.urls')),
+    path('api/collab/', include('collaboration.urls')),
+    path('api/stats/', include('stats.urls')),
     
     # Personalization API
     path('api/', include(router.urls)),
